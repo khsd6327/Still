@@ -1,0 +1,154 @@
+diff --git a/dlls/winemac.drv/cocoa_window.m b/dlls/winemac.drv/cocoa_window.m
+index 8ca5dd7..1f2353d 100644
+--- a/dlls/winemac.drv/cocoa_window.m
++++ b/dlls/winemac.drv/cocoa_window.m
+@@ -3809,6 +3809,28 @@ macdrv_view macdrv_create_view(CGRect rect)
+ }
+ }
+ 
++macdrv_view macdrv_retain_view(macdrv_view v)
++{
++    return (macdrv_view)[(WineContentView *)v retain];
++}
++
++void macdrv_release_view(macdrv_view v)
++{
++    WineContentView *view = (WineContentView *)v;
++    OnMainThread(^{ [view release]; });
++}
++
++macdrv_window macdrv_retain_window(macdrv_window w)
++{
++    return (macdrv_window)[(WineWindow *)w retain];
++}
++
++void macdrv_release_window(macdrv_window w)
++{
++    WineWindow *window = (WineWindow *)w;
++    OnMainThread(^{ [window release]; });
++}
++
+ /***********************************************************************
+  *              macdrv_dispose_view
+  *
+diff --git a/dlls/winemac.drv/macdrv_cocoa.h b/dlls/winemac.drv/macdrv_cocoa.h
+index 9a91edb..eb3802a 100644
+--- a/dlls/winemac.drv/macdrv_cocoa.h
++++ b/dlls/winemac.drv/macdrv_cocoa.h
+@@ -518,6 +518,10 @@ extern void macdrv_order_cocoa_window(macdrv_window w, macdrv_window prev,
+ extern void macdrv_set_window_min_max_sizes(macdrv_window w, CGSize min_size, CGSize max_size);
+ extern macdrv_view macdrv_create_view(CGRect rect);
+ extern void macdrv_dispose_view(macdrv_view v);
++extern macdrv_view macdrv_retain_view(macdrv_view v);
++extern void macdrv_release_view(macdrv_view v);
++extern macdrv_window macdrv_retain_window(macdrv_window w);
++extern void macdrv_release_window(macdrv_window w);
+ extern void macdrv_set_view_frame(macdrv_view v, CGRect rect);
+ extern void macdrv_set_view_superview(macdrv_view v, macdrv_view s, macdrv_window w, macdrv_view p, macdrv_view n);
+ extern void macdrv_set_view_hidden(macdrv_view v, bool hidden);
+diff --git a/dlls/winemac.drv/window.c b/dlls/winemac.drv/window.c
+index c0384f3..4495ace 100644
+--- a/dlls/winemac.drv/window.c
++++ b/dlls/winemac.drv/window.c
+@@ -27,6 +27,7 @@
+ 
+ #include "config.h"
+ 
++#include <stdlib.h>
+ #include <IOKit/pwr_mgt/IOPMLib.h>
+ #define GetCurrentThread Mac_GetCurrentThread
+ #define LoadResource Mac_LoadResource
+@@ -214,6 +215,93 @@ void release_win_data(struct macdrv_win_data *data)
+     if (data) pthread_mutex_unlock(&win_data_mutex);
+ }
+ 
++/* Versioned, layout-independent bridge for open-source Metal translation
++ * layers. Do not expose struct macdrv_win_data outside winemac.drv. */
++struct still_metal_view_bridge
++{
++    macdrv_metal_view metal_view;
++    macdrv_view owned_host_view;
++};
++
++__attribute__((visibility("default"))) macdrv_metal_view
++still_macdrv_create_metal_view_from_hwnd_v1(HWND hwnd, macdrv_metal_device device,
++                                            macdrv_metal_layer *layer)
++{
++    struct still_metal_view_bridge *bridge;
++    struct macdrv_win_data *data;
++    macdrv_view host_view = NULL;
++    macdrv_window cocoa_window = NULL;
++    BOOL retained_host_view = FALSE;
++    RECT rect;
++    HWND root;
++
++    if (layer) *layer = NULL;
++    if (!(bridge = calloc(1, sizeof(*bridge)))) return NULL;
++    if (!(data = get_win_data(hwnd)))
++    {
++        root = NtUserGetAncestor(hwnd, GA_ROOT);
++        if (!root || root == hwnd || !(data = get_win_data(root))) goto failed;
++    }
++
++    if (data->client_view)
++    {
++        host_view = macdrv_retain_view(data->client_view);
++        retained_host_view = TRUE;
++    }
++    else if (data->cocoa_window)
++        cocoa_window = macdrv_retain_window(data->cocoa_window);
++    release_win_data(data);
++
++    /* Never enter the AppKit main-thread bridge while holding win_data_mutex.
++     * The main thread can concurrently need that mutex while the render thread
++     * waits in OnMainThread(), which otherwise deadlocks after the first frame. */
++    if (!host_view && cocoa_window)
++    {
++        if (!NtUserGetClientRect(hwnd, &rect, NtUserGetWinMonitorDpi(hwnd, MDT_RAW_DPI))) goto failed;
++        host_view = macdrv_create_view(cgrect_from_rect(rect));
++        if (!host_view) goto failed;
++        macdrv_set_view_superview(host_view, NULL, cocoa_window, NULL, NULL);
++        macdrv_set_view_hidden(host_view, FALSE);
++        bridge->owned_host_view = host_view;
++    }
++    if (!host_view) goto failed;
++
++    bridge->metal_view = macdrv_view_create_metal_view(host_view, device);
++    if (bridge->metal_view && layer)
++        *layer = macdrv_view_get_metal_layer(bridge->metal_view);
++    if (retained_host_view)
++    {
++        macdrv_release_view(host_view);
++        retained_host_view = FALSE;
++    }
++    if (cocoa_window)
++    {
++        macdrv_release_window(cocoa_window);
++        cocoa_window = NULL;
++    }
++    if (!bridge->metal_view || (layer && !*layer)) goto failed;
++    return (macdrv_metal_view)bridge;
++
++failed:
++    if (retained_host_view) macdrv_release_view(host_view);
++    if (cocoa_window) macdrv_release_window(cocoa_window);
++    if (bridge->metal_view) macdrv_view_release_metal_view(bridge->metal_view);
++    if (bridge->owned_host_view) macdrv_dispose_view(bridge->owned_host_view);
++    free(bridge);
++    return NULL;
++}
++
++__attribute__((visibility("default"))) void
++still_macdrv_release_metal_view_v1(macdrv_metal_view view)
++{
++    struct still_metal_view_bridge *bridge = (struct still_metal_view_bridge *)view;
++
++    if (!bridge) return;
++    if (bridge->metal_view) macdrv_view_release_metal_view(bridge->metal_view);
++    if (bridge->owned_host_view) macdrv_dispose_view(bridge->owned_host_view);
++    free(bridge);
++}
++
+ 
+ /***********************************************************************
+  *              macdrv_get_cocoa_window

@@ -1,0 +1,49 @@
+diff --git a/dlls/kernelbase/process.c b/dlls/kernelbase/process.c
+index 25b3f4f..6efe931 100644
+--- a/dlls/kernelbase/process.c
++++ b/dlls/kernelbase/process.c
+@@ -512,8 +512,12 @@ BOOL WINAPI DECLSPEC_HOTPATCH CreateProcessInternalW( HANDLE token, const WCHAR
+                                                       const WCHAR *cur_dir, STARTUPINFOW *startup_info,
+                                                       PROCESS_INFORMATION *info, HANDLE *new_token )
+ {
++    static const WCHAR raw_angleW[] = L" --use-angle=vulkan";
++    static const WCHAR steamwebhelperW[] = L"steamwebhelper.exe";
+     const struct proc_thread_attr *handle_list = NULL, *job_list = NULL;
++    const WCHAR *base_name;
+     WCHAR name[MAX_PATH];
++    WCHAR enabled[2] = {0};
+     WCHAR *p, *tidy_cmdline = cmd_line;
+     RTL_USER_PROCESS_PARAMETERS *params = NULL;
+     RTL_USER_PROCESS_INFORMATION rtl_info = { 0 };
+@@ -543,6 +547,31 @@ BOOL WINAPI DECLSPEC_HOTPATCH CreateProcessInternalW( HANDLE token, const WCHAR
+         app_name = name;
+     }
+ 
++    /* Select ANGLE's Vulkan backend without enabling Chromium's Vulkan
++     * compositor. Keep this opt-in and scoped to Steam's CEF child. */
++    base_name = app_name;
++    if ((p = wcsrchr( base_name, '\\' ))) base_name = p + 1;
++    if ((p = wcsrchr( base_name, '/' ))) base_name = p + 1;
++    if (GetEnvironmentVariableW( L"STILL_STEAM_CEF_RAW_ANGLE", enabled, ARRAY_SIZE(enabled) ) == 1 &&
++        enabled[0] == '1' && !wcsicmp( base_name, steamwebhelperW ) &&
++        !wcsstr( tidy_cmdline, L"--use-angle=" ))
++    {
++        SIZE_T old_len = lstrlenW( tidy_cmdline );
++        SIZE_T size = (old_len + ARRAY_SIZE(raw_angleW)) * sizeof(WCHAR);
++        WCHAR *new_cmdline;
++
++        if (!(new_cmdline = RtlAllocateHeap( GetProcessHeap(), 0, size )))
++        {
++            status = STATUS_NO_MEMORY;
++            goto done;
++        }
++        memcpy( new_cmdline, tidy_cmdline, old_len * sizeof(WCHAR) );
++        memcpy( new_cmdline + old_len, raw_angleW, sizeof(raw_angleW) );
++        if (tidy_cmdline != cmd_line) RtlFreeHeap( GetProcessHeap(), 0, tidy_cmdline );
++        tidy_cmdline = new_cmdline;
++        TRACE( "Still appended the ANGLE Vulkan switch for %s\n", debugstr_w(app_name) );
++    }
++
+     /* Warn if unsupported features are used */
+ 
+     if (flags & (IDLE_PRIORITY_CLASS | HIGH_PRIORITY_CLASS | REALTIME_PRIORITY_CLASS |

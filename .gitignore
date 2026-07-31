@@ -1,0 +1,16 @@
+.DS_Store
+/.build
+/.derived-data
+/.release-data
+/.swiftpm
+/IconCandidates
+/plan/
+/Still-*.zip
+xcuserdata/
+DerivedData/
+Experiments/**/build/
+*.xcuserstate
+*.dSYM
+*.xcresult
+.env
+.env.*

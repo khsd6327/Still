@@ -1,0 +1,114 @@
+diff --git a/dlls/winemac.drv/cocoa_window.m b/dlls/winemac.drv/cocoa_window.m
+index a6dec88..ddc5b5e 100644
+--- a/dlls/winemac.drv/cocoa_window.m
++++ b/dlls/winemac.drv/cocoa_window.m
+@@ -746,6 +746,7 @@ static CVReturn WineDisplayLinkCallback(CVDisplayLinkRef displayLink, const CVTi
+     {
+         CALayerHost* host = [_caLayerHosts objectForKey:@(contextId)];
+         if (host) host.frame = cgrect_mac_from_win(frame);
++        else [self addCALayerHostViewWithContextId:contextId frame:frame];
+     }
+ 
+     - (void) removeCALayerHostView:(CAContextID)contextId
+@@ -4156,12 +4157,11 @@ void macdrv_view_release_metal_view(macdrv_metal_view v)
+ 
+ - (void) setBounds:(CGRect)bounds
+ {
+-    BOOL changed = !CGRectEqualToRect(hosted_bounds, bounds);
+     hosted_bounds = bounds;
+     OnMainThread(^{
+         [offscreen_layer setBounds:cgrect_mac_from_win(bounds)];
+     });
+-    if (changed && context_id) macdrv_update_remote_layer(hwnd, context_id);
++    if (context_id) macdrv_update_remote_layer(hwnd, context_id);
+ }
+ 
+ - (void) dealloc
+@@ -4199,6 +4199,11 @@ void macdrv_offscreen_swapchain_set_bounds(macdrv_metal_swapchain swapchain, CGR
+         [(CAContextSwapChain*)swapchain setBounds:bounds];
+ }
+ 
++bool macdrv_swapchain_is_offscreen(macdrv_metal_swapchain swapchain)
++{
++    return [(id)swapchain isKindOfClass:[CAContextSwapChain class]];
++}
++
+ macdrv_metal_layer macdrv_swapchain_get_layer(macdrv_metal_swapchain swapchain)
+ {
+     return (macdrv_metal_layer)[(id<WineMetalSwapChain>)swapchain layer];
+diff --git a/dlls/winemac.drv/macdrv_cocoa.h b/dlls/winemac.drv/macdrv_cocoa.h
+index a72844f..9219090 100644
+--- a/dlls/winemac.drv/macdrv_cocoa.h
++++ b/dlls/winemac.drv/macdrv_cocoa.h
+@@ -531,6 +531,7 @@ extern void macdrv_view_release_metal_view(macdrv_metal_view v);
+ extern macdrv_metal_swapchain macdrv_create_view_swapchain(macdrv_view v);
+ extern macdrv_metal_swapchain macdrv_create_offscreen_swapchain(void* hwnd, CGRect bounds);
+ extern void macdrv_offscreen_swapchain_set_bounds(macdrv_metal_swapchain swapchain, CGRect bounds);
++extern bool macdrv_swapchain_is_offscreen(macdrv_metal_swapchain swapchain);
+ extern macdrv_metal_layer macdrv_swapchain_get_layer(macdrv_metal_swapchain swapchain);
+ extern void macdrv_destroy_swapchain(macdrv_metal_swapchain swapchain);
+ extern void macdrv_window_create_ca_layer_host_view(macdrv_window w, unsigned int context_id, CGRect frame);
+diff --git a/dlls/winemac.drv/window.c b/dlls/winemac.drv/window.c
+index 9cce099..d3cf7c3 100644
+--- a/dlls/winemac.drv/window.c
++++ b/dlls/winemac.drv/window.c
+@@ -1105,20 +1105,20 @@ static void macdrv_client_surface_update(struct client_surface *client)
+     struct macdrv_client_surface *surface = impl_from_client_surface(client);
+     HWND hwnd = client->hwnd, toplevel = NtUserGetAncestor(hwnd, GA_ROOT);
+     struct macdrv_win_data *data;
++    RECT rect;
+ 
+     TRACE("%s\n", debugstr_client_surface(client));
+ 
+-    if (!(data = get_win_data(toplevel)))
++    if (surface->metal_swapchain && macdrv_swapchain_is_offscreen(surface->metal_swapchain))
+     {
+-        if (surface->metal_swapchain)
+-        {
+-            TRACE("updating cross-process Metal swapchain for hwnd %p root %p rect %s\n",
+-                  hwnd, toplevel, wine_dbgstr_rect(&client->monitor_rect));
+-            macdrv_offscreen_swapchain_set_bounds(surface->metal_swapchain,
+-                                                   cgrect_from_rect(client->monitor_rect));
+-        }
++        if (!NtUserGetClientRect(hwnd, &rect, NtUserGetWinMonitorDpi(hwnd, MDT_RAW_DPI)))
++            SetRectEmpty(&rect);
++        TRACE("updating stable Metal export for hwnd %p root %p producer rect %s host rect %s\n",
++              hwnd, toplevel, wine_dbgstr_rect(&rect), wine_dbgstr_rect(&client->monitor_rect));
++        macdrv_offscreen_swapchain_set_bounds(surface->metal_swapchain, cgrect_from_rect(rect));
+         return;
+     }
++    if (!(data = get_win_data(toplevel))) return;
+     macdrv_set_view_frame(surface->cocoa_view, cgrect_from_rect(client->monitor_rect));
+     macdrv_set_view_superview(surface->cocoa_view, toplevel == hwnd ? NULL : data->client_view, data->cocoa_window, NULL, NULL);
+     release_win_data(data);
+@@ -1131,6 +1131,8 @@ static void macdrv_client_surface_present(struct client_surface *client, HDC hdc
+ 
+     TRACE("%s\n", debugstr_client_surface(client));
+ 
++    if (surface->metal_swapchain && macdrv_swapchain_is_offscreen(surface->metal_swapchain)) return;
++
+     if (!(data = get_win_data(surface->client.hwnd))) return;
+     if (data->client_view != surface->cocoa_view)
+     {
+@@ -1176,10 +1178,20 @@ BOOL macdrv_client_surface_acquire_metal_swapchain(struct macdrv_client_surface
+ {
+     HWND hwnd = surface->client.hwnd, toplevel = NtUserGetAncestor(hwnd, GA_ROOT);
+     struct macdrv_win_data *data;
++    const char *remote_metal_mode = getenv("WINEMAC_REMOTE_METAL_MODE");
+ 
+     if (surface->metal_swapchain) return TRUE;
+ 
+-    if ((data = get_win_data(toplevel)))
++    if (remote_metal_mode && !strcmp(remote_metal_mode, "stable"))
++    {
++        RECT rect;
++
++        if (!NtUserGetClientRect(hwnd, &rect, NtUserGetWinMonitorDpi(hwnd, MDT_RAW_DPI))) return FALSE;
++        TRACE("creating stable Metal export for hwnd %p root %p rect %s\n",
++              hwnd, toplevel, wine_dbgstr_rect(&rect));
++        surface->metal_swapchain = macdrv_create_offscreen_swapchain(hwnd, cgrect_from_rect(rect));
++    }
++    else if ((data = get_win_data(toplevel)))
+     {
+         release_win_data(data);
+         surface->metal_swapchain = macdrv_create_view_swapchain(surface->cocoa_view);

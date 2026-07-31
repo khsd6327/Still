@@ -1,0 +1,113 @@
+name: Still
+
+options:
+  bundleIdPrefix: app.stillproject
+  createIntermediateGroups: true
+  deploymentTarget:
+    macOS: "26.0"
+
+configs:
+  Debug: debug
+  Release: release
+
+settings:
+  base:
+    CURRENT_PROJECT_VERSION: 1
+    MARKETING_VERSION: 0.1.0
+    MACOSX_DEPLOYMENT_TARGET: "26.0"
+    SWIFT_VERSION: "6.0"
+  configs:
+    Release:
+      CLANG_ENABLE_CODE_COVERAGE: NO
+      GCC_GENERATE_TEST_COVERAGE_FILES: NO
+      GCC_INSTRUMENT_PROGRAM_FLOW_ARCS: NO
+
+targets:
+  StillCore:
+    type: framework
+    platform: macOS
+    sources:
+      - Sources/StillCore
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: app.stillproject.still.core
+        PRODUCT_NAME: StillCore
+
+  Still:
+    type: application
+    platform: macOS
+    sources:
+      - Sources/StillDesktop
+    dependencies:
+      - target: StillCore
+    info:
+      path: SupportingFiles/Still-Info.plist
+      properties:
+        CFBundleDisplayName: Still
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        CFBundleName: Still
+        LSApplicationCategoryType: public.app-category.utilities
+        LSMinimumSystemVersion: "$(MACOSX_DEPLOYMENT_TARGET)"
+        NSHighResolutionCapable: true
+        NSHumanReadableCopyright: "Copyright © 2026 Still contributors."
+        NSPrincipalClass: NSApplication
+    settings:
+      base:
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGN_STYLE: Manual
+        ENABLE_HARDENED_RUNTIME: NO
+        PRODUCT_BUNDLE_IDENTIFIER: app.stillproject.still
+        PRODUCT_NAME: Still
+
+  StillCoreTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - Tests/StillCoreTests
+    dependencies:
+      - target: StillCore
+    settings:
+      base:
+        CODE_SIGNING_ALLOWED: NO
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: app.stillproject.still.core-tests
+
+schemes:
+  Still:
+    build:
+      targets:
+        Still: all
+        StillCoreTests:
+          - test
+      postActions:
+        - name: Install Still in Applications
+          settingsTarget: Still
+          script: |
+            if [ "${CONFIGURATION:-}" != "Debug" ]; then
+              exit 0
+            fi
+
+            source_app="${TARGET_BUILD_DIR}/${FULL_PRODUCT_NAME}"
+            destination_app="/Applications/${FULL_PRODUCT_NAME}"
+
+            if [ ! -d "${source_app}" ]; then
+              echo "error: Built app was not found at ${source_app}"
+              exit 1
+            fi
+
+            /usr/bin/ditto "${source_app}" "${destination_app}"
+            /usr/bin/codesign --verify --deep --strict "${destination_app}"
+            /usr/bin/touch "${destination_app}"
+            echo "Installed ${destination_app}"
+    run:
+      config: Debug
+    test:
+      config: Debug
+      gatherCoverageData: true
+      targets:
+        - StillCoreTests
+    archive:
+      config: Release
