@@ -41,4 +41,38 @@ final class ApplicationRecipeTests: XCTestCase {
             []
         )
     }
+
+    func testSteamDXMTClientEnablesScopedRawANGLEBridge() {
+        let bottle = Bottle(
+            name: "Steam",
+            prefixURL: URL(filePath: "/tmp/steam"),
+            graphicsBackend: .dxmt
+        )
+
+        XCTAssertEqual(
+            SteamBootstrapper.launchEnvironment(
+                for: bottle,
+                executableURL: URL(filePath: "/tmp/steam/steam.exe")
+            ),
+            ["STILL_STEAM_CEF_RAW_ANGLE": "1"]
+        )
+        XCTAssertEqual(
+            SteamBootstrapper.launchEnvironment(
+                for: bottle,
+                executableURL: URL(filePath: "/tmp/steam/game.exe")
+            ),
+            [:]
+        )
+        XCTAssertEqual(
+            SteamBootstrapper.launchEnvironment(
+                for: Bottle(
+                    name: "Steam",
+                    prefixURL: URL(filePath: "/tmp/steam"),
+                    graphicsBackend: .wineD3D
+                ),
+                executableURL: URL(filePath: "/tmp/steam/steam.exe")
+            ),
+            [:]
+        )
+    }
 }

@@ -375,13 +375,22 @@ final class AppModel: ObservableObject {
                 )
             }
             let engine = try engine(for: environment)
+            let bottle = bottle(from: environment)
+            let launchEnvironment = application.selectedProfileID
+                == BundledCompatibilityProfiles.steam.id
+                ? SteamBootstrapper.launchEnvironment(
+                    for: bottle,
+                    executableURL: entry.executableURL
+                )
+                : [:]
             let session = try await LocalWineEngine(
                 descriptor: engine,
                 processSupervisor: supervisor
             ).launch(LaunchRequest(
-                bottle: bottle(from: environment),
+                bottle: bottle,
                 executableURL: entry.executableURL,
                 arguments: entry.arguments,
+                environment: launchEnvironment,
                 workingDirectoryURL: entry.workingDirectoryURL,
                 applicationID: application.id,
                 environmentID: environment.id

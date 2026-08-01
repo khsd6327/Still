@@ -38,6 +38,18 @@ public actor SteamBootstrapper {
         }
     }
 
+    public static func launchEnvironment(
+        for bottle: Bottle,
+        executableURL: URL
+    ) -> [String: String] {
+        guard bottle.graphicsBackend == .dxmt,
+              executableURL.lastPathComponent.caseInsensitiveCompare("steam.exe")
+                == .orderedSame else {
+            return [:]
+        }
+        return ["STILL_STEAM_CEF_RAW_ANGLE": "1"]
+    }
+
     private let bottleStore: JSONBottleStore
     private let engineInstaller: EngineInstaller
     private let applicationInstaller: WindowsApplicationInstaller
