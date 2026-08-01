@@ -166,6 +166,24 @@ public actor JSONStillStore {
         try save(document)
     }
 
+    public func synchronizeInstalledEngineBuilds(_ builds: [EngineBuild]) throws {
+        guard !builds.isEmpty else { return }
+        var document = try load()
+        var changed = false
+        for build in builds {
+            if let index = document.engineBuilds.firstIndex(where: { $0.id == build.id }) {
+                guard document.engineBuilds[index] != build else { continue }
+                document.engineBuilds[index] = build
+            } else {
+                document.engineBuilds.append(build)
+            }
+            changed = true
+        }
+        if changed {
+            try save(document)
+        }
+    }
+
     public func updatePinnedEngine(
         environmentID: WindowsEnvironment.ID,
         engineBuildID: EngineBuild.ID,
@@ -201,6 +219,71 @@ public actor JSONStillStore {
         }
         document.environments[index].pinnedEngineBuildID = engineBuildID
         document.environments[index].updatedAt = .now
+        try save(document)
+    }
+
+    public func commitManagedRuntimeReplacement(
+        environment replacement: WindowsEnvironment,
+        expectedSourcePrefixURL: URL,
+        activeSessions: [LaunchSession],
+        userApproved: Bool,
+        sourcePrefixRetained: Bool
+    ) throws {
+        var document = try load()
+        guard let index = document.environments.firstIndex(
+            where: { $0.id == replacement.id }
+        ) else {
+            throw StillCoreError.invalidStore("Environment '\(replacement.id)' was not found.")
+        }
+        let current = document.environments[index]
+        guard current.prefixURL.standardizedFileURL.path
+            == expectedSourcePrefixURL.standardizedFileURL.path else {
+            throw StillCoreError.invalidStore(
+                "The Environment source path changed before runtime replacement."
+            )
+        }
+        guard replacement.ownership == .managed,
+              replacement.managementNonce != nil,
+              let engineBuildID = replacement.pinnedEngineBuildID,
+              replacement.provisionedEngineBuildID == engineBuildID,
+              document.engineBuilds.contains(where: { $0.id == engineBuildID }) else {
+            throw StillCoreError.engineChangeRequirementsNotMet(
+                "The replacement must use a registered engine and verified managed ownership."
+            )
+        }
+        guard !activeSessions.contains(where: {
+            $0.environmentID == replacement.id && $0.state.isActive
+        }) else {
+            throw StillCoreError.environmentMustBeStopped(replacement.id)
+        }
+        guard userApproved else {
+            throw StillCoreError.engineChangeRequirementsNotMet(
+                "Explicit approval is required."
+            )
+        }
+        guard sourcePrefixRetained else {
+            throw StillCoreError.engineChangeRequirementsNotMet(
+                "Retain the source prefix as the rollback copy."
+            )
+        }
+
+        document.environments[index] = replacement
+        document.launchEntries = document.launchEntries.map { entry in
+            var replacementEntry = entry
+            replacementEntry.executableURL = remap(
+                entry.executableURL,
+                from: current.prefixURL,
+                to: replacement.prefixURL
+            )
+            if let workingDirectoryURL = entry.workingDirectoryURL {
+                replacementEntry.workingDirectoryURL = remap(
+                    workingDirectoryURL,
+                    from: current.prefixURL,
+                    to: replacement.prefixURL
+                )
+            }
+            return replacementEntry
+        }
         try save(document)
     }
 
@@ -242,6 +325,15 @@ public actor JSONStillStore {
         document.applications.removeAll { applicationIDs.contains($0.id) }
         document.operations.removeAll { $0.environmentID == id }
         document.environments.removeAll { $0.id == id }
+    }
+
+    private func remap(_ url: URL, from sourceRoot: URL, to destinationRoot: URL) -> URL {
+        let sourcePath = sourceRoot.standardizedFileURL.path
+        let path = url.standardizedFileURL.path
+        guard path == sourcePath || path.hasPrefix(sourcePath + "/") else { return url }
+        let relative = String(path.dropFirst(sourcePath.count))
+            .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        return relative.isEmpty ? destinationRoot : destinationRoot.appending(path: relative)
     }
 
     public func removeApplicationFromLibrary(id: LibraryApplication.ID) throws {

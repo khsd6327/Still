@@ -89,6 +89,53 @@ final class EngineInstallerTests: XCTestCase {
         }
     }
 
+    func testDiscoversLocallyBuiltEngineFromVersionedManifest() async throws {
+        let fileManager = FileManager.default
+        let rootURL = fileManager.temporaryDirectory
+            .appending(path: "StillLocalEngineTests")
+            .appending(path: UUID().uuidString)
+        defer { try? fileManager.removeItem(at: rootURL) }
+
+        let versionURL = rootURL
+            .appending(path: "still-dxmt", directoryHint: .isDirectory)
+            .appending(path: "11.14", directoryHint: .isDirectory)
+        let binaryURL = versionURL.appending(
+            path: "Wine Staging.app/Contents/Resources/wine/bin/wine"
+        )
+        try fileManager.createDirectory(
+            at: binaryURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try Data("#!/bin/sh\nexit 0\n".utf8).write(to: binaryURL)
+        try fileManager.setAttributes(
+            [.posixPermissions: 0o755],
+            ofItemAtPath: binaryURL.path
+        )
+        let manifest = InstalledEngineBuildManifest(
+            id: "still-dxmt",
+            family: .wineStaging,
+            displayName: "Still DXMT",
+            version: "11.14",
+            archiveRoot: "Wine Staging.app",
+            wineBinaryRelativePath: "Contents/Resources/wine/bin/wine",
+            capabilities: [.win64, .esync, .dxmt]
+        )
+        try JSONEncoder().encode(manifest).write(
+            to: versionURL.appending(path: InstalledEngineBuildManifest.fileName)
+        )
+
+        let descriptors = await EngineInstaller(rootURL: rootURL).installedDescriptors()
+
+        XCTAssertEqual(descriptors.count, 1)
+        XCTAssertEqual(descriptors[0].id, "still-dxmt")
+        XCTAssertEqual(descriptors[0].family, .wineStaging)
+        XCTAssertTrue(descriptors[0].capabilities.contains(.dxmt))
+        XCTAssertEqual(
+            descriptors[0].wineBinaryURL.resolvingSymlinksInPath(),
+            binaryURL.resolvingSymlinksInPath()
+        )
+    }
+
     func testGPTKRequiresExternalLicenseAcceptance() async {
         let manifest = try! BundledEngineCatalog.manifest(
             id: "gcenx-gptk-3.0-3"

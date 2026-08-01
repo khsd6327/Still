@@ -11,7 +11,14 @@ public enum BundledCompatibilityProfiles {
                 executableNames: ["steam.exe"]
             )
         ],
-        requiredCapabilities: [.win64]
+        requiredEngineFamily: .wineStaging,
+        requiredCapabilities: [.win64, .dxmt, .dxmtBridge],
+        recommendedSettings: CompatibilitySettings(
+            windowsVersion: .windows10,
+            graphicsBackend: .dxmt,
+            enhancedSync: .automatic
+        ),
+        validationEvidence: ["Steam client UI rendered with the pinned DXMT bridge build."]
     )
 
     public static let all = [steam]

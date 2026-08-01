@@ -93,6 +93,7 @@
 		BBCD16D9555F34FB4841332A /* WineEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = F72E9E612C050188F4EC143E /* WineEngine.swift */; };
 		BCFE15B685D0964E3096016A /* SupportBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1874127CF8C78D801108DAC /* SupportBundle.swift */; };
 		C31D915CADC4BE9D54BE72D6 /* EngineRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA54151AD9A6BDF186510106 /* EngineRegistry.swift */; };
+		C0DEC0DE0000000000000012 /* InstalledEngineBuildManifest.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEC0DE0000000000000011 /* InstalledEngineBuildManifest.swift */; };
 		C5A1930D9953255D1711D004 /* SupportBundleService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2320A3F5927A013F3F108B52 /* SupportBundleService.swift */; };
 		C8A8B6C1F0F2462A065FE191 /* RuntimeInventory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7107D65D16C62BE9CAB8C3DA /* RuntimeInventory.swift */; };
 		CA18627069DAEBED2AA39921 /* WindowsExecutableScannerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F9A2BF5D71ED18D9D8AA5FE /* WindowsExecutableScannerTests.swift */; };
@@ -181,6 +182,7 @@
 		1F27A98A2906B708CA540286 /* RepairService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RepairService.swift; sourceTree = "<group>"; };
 		2320A3F5927A013F3F108B52 /* SupportBundleService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupportBundleService.swift; sourceTree = "<group>"; };
 		24092BBAE07A2D3C8312259E /* EngineDescriptor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EngineDescriptor.swift; sourceTree = "<group>"; };
+		C0DEC0DE0000000000000011 /* InstalledEngineBuildManifest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstalledEngineBuildManifest.swift; sourceTree = "<group>"; };
 		2847CD8F28CA6F2D7CD664FD /* BundledCompatibilityProfiles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BundledCompatibilityProfiles.swift; sourceTree = "<group>"; };
 		297CC2B02C6FE31D383F4408 /* ValveKeyValueParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ValveKeyValueParser.swift; sourceTree = "<group>"; };
 		2BC4F55CA9FA96602041A234 /* WindowsExecutableScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowsExecutableScanner.swift; sourceTree = "<group>"; };
@@ -314,6 +316,7 @@
 				6B699A7BD956ACA491391B7B /* DXMTBridgeManifest.swift */,
 				24092BBAE07A2D3C8312259E /* EngineDescriptor.swift */,
 				ADB8934289AF933ED86C6A07 /* EngineManifest.swift */,
+				C0DEC0DE0000000000000011 /* InstalledEngineBuildManifest.swift */,
 				5E709BB30A19196F038EDA1C /* Environment.swift */,
 				006DA5C9B51DE18CB3172AAC /* GraphicsBackend.swift */,
 				8A796481567BE9CD09570049 /* InstalledWindowsApplication.swift */,
@@ -665,6 +668,7 @@
 				D95D967BB62E6D9E074A6538 /* DependencyPlanner.swift in Sources */,
 				1F9770B68B12D9EB8D61E19F /* Discovery.swift in Sources */,
 				D9960CC540EFB09AAFE38349 /* EngineDescriptor.swift in Sources */,
+				C0DEC0DE0000000000000012 /* InstalledEngineBuildManifest.swift in Sources */,
 				67EDA103792A74378B58740D /* EngineInstaller.swift in Sources */,
 				E2754F24041E6BD6B501DA9E /* EngineLocations.swift in Sources */,
 				191E444227F05C0FB836791D /* EngineManifest.swift in Sources */,

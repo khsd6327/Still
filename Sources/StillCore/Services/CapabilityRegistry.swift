@@ -28,6 +28,7 @@ public struct CapabilityRegistry: Sendable {
             if engine.capabilities.contains(.esync) { available.insert(.esync) }
             if engine.capabilities.contains(.msync) { available.insert(.msync) }
             if engine.capabilities.contains(.d3dMetal) { available.insert(.d3dMetal) }
+            if engine.capabilities.contains(.dxmt) { available.insert(.dxmt) }
         }
         available.formUnion(componentCapabilities)
         if let bridgeAvailability {

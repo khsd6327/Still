@@ -12,12 +12,14 @@ public struct EngineCapabilities: OptionSet, Codable, Hashable, Sendable {
     public static let msync = Self(rawValue: 1 << 2)
     public static let esync = Self(rawValue: 1 << 3)
     public static let d3dMetal = Self(rawValue: 1 << 4)
+    public static let dxmt = Self(rawValue: 1 << 5)
 }
 
 public struct EngineDescriptor: Codable, Hashable, Identifiable, Sendable {
     public let id: String
     public let displayName: String
     public let version: String
+    public let family: EngineFamily?
     public let wineBinaryURL: URL
     public let capabilities: EngineCapabilities
 
@@ -25,12 +27,14 @@ public struct EngineDescriptor: Codable, Hashable, Identifiable, Sendable {
         id: String,
         displayName: String,
         version: String,
+        family: EngineFamily? = nil,
         wineBinaryURL: URL,
         capabilities: EngineCapabilities
     ) {
         self.id = id
         self.displayName = displayName
         self.version = version
+        self.family = family
         self.wineBinaryURL = wineBinaryURL
         self.capabilities = capabilities
     }

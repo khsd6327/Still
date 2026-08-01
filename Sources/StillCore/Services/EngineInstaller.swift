@@ -124,13 +124,95 @@ public actor EngineInstaller {
             id: manifest.id,
             displayName: manifest.displayName,
             version: manifest.version,
+            family: manifest.family,
             wineBinaryURL: wineBinaryURL,
             capabilities: manifest.capabilities
         )
     }
 
     public func installedDescriptors() -> [EngineDescriptor] {
-        BundledEngineCatalog.manifests.compactMap(installedDescriptor)
+        let bundled = BundledEngineCatalog.manifests.compactMap(installedDescriptor)
+        let bundledIDs = Set(bundled.map(\.id))
+        return (bundled + installedLocalDescriptors().filter {
+            !bundledIDs.contains($0.id)
+        }).sorted {
+            $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending
+        }
+    }
+
+    private func installedLocalDescriptors() -> [EngineDescriptor] {
+        guard let engineDirectories = try? fileManager.contentsOfDirectory(
+            at: rootURL,
+            includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey],
+            options: [.skipsHiddenFiles]
+        ) else { return [] }
+
+        return engineDirectories.flatMap { engineDirectory -> [EngineDescriptor] in
+            guard isPlainDirectory(engineDirectory),
+                  let versionDirectories = try? fileManager.contentsOfDirectory(
+                    at: engineDirectory,
+                    includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey],
+                    options: [.skipsHiddenFiles]
+                  ) else { return [] }
+            return versionDirectories.compactMap { versionDirectory in
+                localDescriptor(
+                    engineDirectory: engineDirectory,
+                    versionDirectory: versionDirectory
+                )
+            }
+        }
+    }
+
+    private func localDescriptor(
+        engineDirectory: URL,
+        versionDirectory: URL
+    ) -> EngineDescriptor? {
+        guard isPlainDirectory(versionDirectory) else { return nil }
+        let manifestURL = versionDirectory.appending(
+            path: InstalledEngineBuildManifest.fileName
+        )
+        guard let data = try? Data(contentsOf: manifestURL),
+              let manifest = try? JSONDecoder().decode(
+                InstalledEngineBuildManifest.self,
+                from: data
+              ),
+              manifest.contractID == InstalledEngineBuildManifest.contract,
+              manifest.schemaVersion == InstalledEngineBuildManifest.supportedSchemaVersion,
+              manifest.id == engineDirectory.lastPathComponent,
+              manifest.version == versionDirectory.lastPathComponent,
+              isSafePathComponent(manifest.archiveRoot),
+              isSafeRelativePath(manifest.wineBinaryRelativePath) else {
+            return nil
+        }
+        let binaryURL = versionDirectory
+            .appending(path: manifest.archiveRoot, directoryHint: .isDirectory)
+            .appending(path: manifest.wineBinaryRelativePath)
+        guard fileManager.isExecutableFile(atPath: binaryURL.path) else { return nil }
+        return EngineDescriptor(
+            id: manifest.id,
+            displayName: manifest.displayName,
+            version: manifest.version,
+            family: manifest.family,
+            wineBinaryURL: binaryURL,
+            capabilities: manifest.capabilities
+        )
+    }
+
+    private func isPlainDirectory(_ url: URL) -> Bool {
+        guard let values = try? url.resourceValues(
+            forKeys: [.isDirectoryKey, .isSymbolicLinkKey]
+        ) else { return false }
+        return values.isDirectory == true && values.isSymbolicLink != true
+    }
+
+    private func isSafePathComponent(_ path: String) -> Bool {
+        !path.isEmpty && path != "." && path != ".." && !path.contains("/")
+    }
+
+    private func isSafeRelativePath(_ path: String) -> Bool {
+        !path.isEmpty
+            && !path.hasPrefix("/")
+            && !path.split(separator: "/").contains("..")
     }
 
     private func installationURL(for manifest: EngineManifest) -> URL {

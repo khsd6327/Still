@@ -26,6 +26,7 @@ final class AppModel: ObservableObject {
     private let ownershipService = EnvironmentOwnershipService()
     private let compatibilityResolver = CompatibilityResolver()
     private let profileMatcher = CompatibilityProfileMatcher()
+    private let dxmtBridgeValidator = DXMTBridgeValidator()
     private lazy var deletionCoordinator = EnvironmentDeletionCoordinator(
         store: store,
         ownershipService: ownershipService,
@@ -201,6 +202,10 @@ final class AppModel: ObservableObject {
             launchEntries = document.launchEntries
             operations = document.operations.sorted { $0.createdAt > $1.createdAt }
             installedEngines = await engineInstaller.installedDescriptors()
+            let installedBuilds = try installedEngines.map(runtimeBuild)
+            try await store.synchronizeInstalledEngineBuilds(installedBuilds)
+            document = try await store.load()
+            environments = document.environments
             var discoveryFailureCount = 0
             if scanRegisteredEnvironments, !environments.isEmpty {
                 let summary = await discoverApplications(environmentID: nil)
@@ -448,7 +453,10 @@ final class AppModel: ObservableObject {
                 registry: CapabilityRegistry(
                     host: currentHostCapabilities(),
                     engine: engineBuild,
-                    components: document.components
+                    components: document.components,
+                    bridgeAvailability: engine.capabilities.contains(.dxmt)
+                        ? dxmtBridgeValidator.validate(engine: engine)
+                        : nil
                 )
             )
             var effectiveEnvironment = environment
@@ -919,15 +927,18 @@ final class AppModel: ObservableObject {
     }
 
     private func runtimeBuild(for engine: EngineDescriptor) throws -> EngineBuild {
-        let manifest = try BundledEngineCatalog.manifest(id: engine.id)
+        let bundledManifest = try? BundledEngineCatalog.manifest(id: engine.id)
+        guard let family = engine.family ?? bundledManifest?.family else {
+            throw StillCoreError.invalidEngineInstallation(engine.wineBinaryURL)
+        }
         return EngineBuild(
             id: engine.id,
-            family: manifest.family,
+            family: family,
             displayName: engine.displayName,
             version: engine.version,
             installURL: engine.wineBinaryURL.deletingLastPathComponent(),
             capabilities: engine.capabilities,
-            manifestID: manifest.id
+            manifestID: bundledManifest?.id
         )
     }
 

@@ -4,10 +4,15 @@ import XCTest
 final class ApplicationRecipeTests: XCTestCase {
     func testSteamUsesCurrentStagingClientProfile() {
         let recipe = BundledApplicationRecipes.steam
+        let profile = BundledCompatibilityProfiles.steam
 
         XCTAssertEqual(recipe.preferredEngineFamily, .wineStaging)
         XCTAssertEqual(recipe.windowsVersion, .windows10)
         XCTAssertEqual(recipe.graphicsBackend, .wineD3D)
+        XCTAssertEqual(profile.requiredEngineFamily, .wineStaging)
+        XCTAssertTrue(profile.requiredCapabilities.contains(.dxmt))
+        XCTAssertTrue(profile.requiredCapabilities.contains(.dxmtBridge))
+        XCTAssertEqual(profile.recommendedSettings.graphicsBackend, .dxmt)
         XCTAssertNotNil(recipe.installer)
         XCTAssertEqual(recipe.installer?.acceptedFileNames, ["steamsetup.exe"])
         XCTAssertEqual(recipe.installer?.arguments, ["/S"])

@@ -31,19 +31,30 @@ Scripts/build-wine-11.14-macdrv.sh <wine-source> <build-directory>
 Build DXMT from the pinned source revision with:
 
 ```sh
-Scripts/build-dxmt-direct-bridge.sh <dxmt-source> <build-directory>
+Scripts/build-dxmt-direct-bridge.sh <dxmt-source> <build-directory> <wine-build-directory>
 ```
 
 Stage the compatible artifacts and generate their integrity manifest with:
 
 ```sh
-Scripts/package-dxmt-direct-bridge.sh <engine-root> <winemac.so> <winemetal.so>
+Scripts/package-dxmt-direct-bridge.sh \
+  <engine-root> <wine-version> <dxmt-revision> \
+  <winemac.so> <winemetal.so> <kernelbase.dll> <dxmt-windows-directory>
+```
+
+Register a source-built engine after staging its Wine bundle:
+
+```sh
+Scripts/register-local-engine-build.sh \
+  <version-root> <engine-id> <family> <display-name> <version> \
+  <archive-root> <wine-binary-relative-path> <capabilities>
 ```
 
 Still validates the ABI version, producer ownership, artifact hashes, and
 runtime paths before reporting the bridge as available. Default application
-launches use the direct bridge. The compatibility shim remains a Debug-only,
-explicitly enabled diagnostic tool.
+launches use the direct bridge. Steam launches on this source-built runtime use
+the Raw ANGLE Wine path selected by `STILL_WINE_RAW_ANGLE=1`. The compatibility
+shim remains a Debug-only, explicitly enabled diagnostic tool.
 
 ## Storage location
 
@@ -51,4 +62,6 @@ explicitly enabled diagnostic tool.
 ~/Library/Application Support/app.stillproject.still/Engines/
 ```
 
-Each engine is stored under its manifest identifier and version.
+Each engine is stored under its manifest identifier and version. Source-built
+engines are discovered from a version-root `still-engine.json` manifest and
+become available for guarded Environment engine selection.
