@@ -11,9 +11,9 @@ launcher or compatibility engine.
 
 ## Status
 
-Still is pre-release software under active development. Application
-compatibility varies by engine, macOS version, and graphics backend. Release
-builds are ad hoc signed and are not notarized.
+The current release is **0.1.0-alpha.2**. Still remains pre-release software;
+application compatibility varies by engine, macOS version, and graphics
+backend. Release builds are ad hoc signed and are not notarized.
 
 ## Preview
 
