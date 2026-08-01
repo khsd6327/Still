@@ -64,6 +64,58 @@ public struct BackupPreview: Hashable, Sendable {
     public let isEncrypted: Bool
 }
 
+public enum EnvironmentRestoreJournalState: String, Codable, Sendable {
+    case prepared
+    case prefixMaterialized
+    case storeCommitted
+    case rolledBack
+}
+
+public struct EnvironmentRestoreJournal: Codable, Equatable, Identifiable, Sendable {
+    public static let currentVersion = 1
+
+    public let version: Int
+    public let id: UUID
+    public let storeIdentifier: UUID
+    public let environmentID: WindowsEnvironment.ID
+    public let managementNonce: UUID
+    public let stagingPrefixURL: URL
+    public let destinationPrefixURL: URL
+    public let applicationIDs: [LibraryApplication.ID]
+    public let launchEntryIDs: [LaunchEntry.ID]
+    public var state: EnvironmentRestoreJournalState
+    public let createdAt: Date
+    public var updatedAt: Date
+
+    public init(
+        version: Int = Self.currentVersion,
+        id: UUID = UUID(),
+        storeIdentifier: UUID,
+        environmentID: WindowsEnvironment.ID,
+        managementNonce: UUID,
+        stagingPrefixURL: URL,
+        destinationPrefixURL: URL,
+        applicationIDs: [LibraryApplication.ID],
+        launchEntryIDs: [LaunchEntry.ID],
+        state: EnvironmentRestoreJournalState = .prepared,
+        createdAt: Date = .now,
+        updatedAt: Date = .now
+    ) {
+        self.version = version
+        self.id = id
+        self.storeIdentifier = storeIdentifier
+        self.environmentID = environmentID
+        self.managementNonce = managementNonce
+        self.stagingPrefixURL = stagingPrefixURL
+        self.destinationPrefixURL = destinationPrefixURL
+        self.applicationIDs = applicationIDs
+        self.launchEntryIDs = launchEntryIDs
+        self.state = state
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
+}
+
 public enum RepairSeverity: String, Codable, Sendable {
     case warning
     case blocking

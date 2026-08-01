@@ -76,9 +76,10 @@ struct EnvironmentsView: View {
             Button("Import", systemImage: "square.and.arrow.down") {
                 Task { await model.importEnvironment() }
             }
-            Button("Restore Unavailable", systemImage: "arrow.counterclockwise") {}
-                .disabled(true)
-                .help("Restore is temporarily unavailable while transactional rollback is being implemented.")
+            Button("Restore Backup…", systemImage: "arrow.counterclockwise") {
+                showsRestoreBackup = true
+            }
+                .help("Restore an Environment from a Still backup")
             Button("Create", systemImage: "plus") {
                 Task { await model.createEnvironment() }
             }
@@ -199,7 +200,7 @@ private struct BackupRestoreView: View {
                 HStack {
                     Button("Cancel") { dismiss() }
                     Spacer()
-                    Button("Preview and Restore") {
+                    Button("Restore") {
                         guard let backupURL else { return }
                         dismiss()
                         Task { await model.restoreBackup(at: backupURL, password: password) }

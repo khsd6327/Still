@@ -431,6 +431,66 @@ public actor JSONStillStore {
         try save(document)
     }
 
+    public func commitRestoredEnvironment(
+        _ environment: WindowsEnvironment,
+        applications: [LibraryApplication],
+        launchEntries: [LaunchEntry],
+        requiredEngineBuildID: EngineBuild.ID?,
+        requiredComponents: [RuntimeComponent.ID: String],
+        expectedStoreIdentifier: UUID
+    ) throws {
+        var document = try load()
+        guard document.storeIdentifier == expectedStoreIdentifier else {
+            throw StillCoreError.invalidStore(
+                "The restore transaction belongs to a different Still store."
+            )
+        }
+        guard !document.environments.contains(where: { $0.id == environment.id }) else {
+            throw StillCoreError.invalidStore(
+                "Environment '\(environment.id)' already exists."
+            )
+        }
+        guard applications.allSatisfy({ $0.environmentID == environment.id }) else {
+            throw StillCoreError.invalidStore(
+                "The restored applications do not belong to the restored Environment."
+            )
+        }
+        let applicationIDs = Set(applications.map(\.id))
+        guard applicationIDs.count == applications.count,
+              launchEntries.allSatisfy({ applicationIDs.contains($0.applicationID) }) else {
+            throw StillCoreError.invalidStore(
+                "The restored application relationships are inconsistent."
+            )
+        }
+        let newEntryIDs = Set(launchEntries.map(\.id))
+        guard newEntryIDs.count == launchEntries.count,
+              document.applications.allSatisfy({ !applicationIDs.contains($0.id) }),
+              document.launchEntries.allSatisfy({ !newEntryIDs.contains($0.id) }) else {
+            throw StillCoreError.invalidStore(
+                "The restored records conflict with existing Library records."
+            )
+        }
+        if let requiredEngineBuildID,
+           !document.engineBuilds.contains(where: { $0.id == requiredEngineBuildID }) {
+            throw StillCoreError.engineNotFound(requiredEngineBuildID)
+        }
+        for (componentID, requiredVersion) in requiredComponents {
+            guard document.components.contains(where: {
+                $0.id == componentID && $0.version == requiredVersion
+            }) else {
+                throw StillCoreError.unavailableCapability(
+                    componentID,
+                    "Version \(requiredVersion) is required by the backup."
+                )
+            }
+        }
+
+        document.environments.append(environment)
+        document.applications.append(contentsOf: applications)
+        document.launchEntries.append(contentsOf: launchEntries)
+        try save(document)
+    }
+
     public func operations(
         environmentID: WindowsEnvironment.ID? = nil
     ) throws -> [StillOperation] {

@@ -6,7 +6,6 @@ import UniformTypeIdentifiers
 
 private enum StabilizationGate {
     static let physicalEnvironmentDeletionEnabled = true
-    static let restoreEnabled = false
 }
 
 @MainActor
@@ -28,6 +27,12 @@ final class AppModel: ObservableObject {
     private let dxmtBridgeValidator = DXMTBridgeValidator()
     private lazy var deletionCoordinator = EnvironmentDeletionCoordinator(
         store: store,
+        ownershipService: ownershipService,
+        rootURL: JSONStillStore.defaultRootURL()
+    )
+    private lazy var restoreCoordinator = EnvironmentRestoreCoordinator(
+        store: store,
+        backupService: backupService,
         ownershipService: ownershipService,
         rootURL: JSONStillStore.defaultRootURL()
     )
@@ -194,6 +199,7 @@ final class AppModel: ObservableObject {
         do {
             _ = try logRotationService.rotate(retentionDays: logRetentionDays)
             _ = try await deletionCoordinator.recoverInterruptedDeletions()
+            _ = try await restoreCoordinator.recoverInterruptedRestores()
             _ = try await store.recoverInterruptedOperations()
             var document = try await store.load()
             environments = document.environments
@@ -776,79 +782,16 @@ final class AppModel: ObservableObject {
     }
 
     func restoreBackup(at backupURL: URL, password: String?) async {
-        guard StabilizationGate.restoreEnabled else {
-            errorMessage = "Restore is temporarily unavailable while transactional restore and rollback are being implemented."
-            return
-        }
-        let destinationID = UUID()
-        let destinationPrefix = JSONBottleStore.defaultRootURL()
-            .appending(path: "Environments", directoryHint: .isDirectory)
-            .appending(path: destinationID.uuidString, directoryHint: .isDirectory)
         do {
-            let manifest = try await backupService.restore(
+            let restoredEnvironment = try await restoreCoordinator.restore(
                 backupURL: backupURL,
-                destinationPrefixURL: destinationPrefix,
                 password: password?.isEmpty == true ? nil : password,
                 activeSessions: sessions
             )
-            let source = manifest.environment
-            let restoredEnvironment = WindowsEnvironment(
-                id: destinationID,
-                name: "\(source.name) Restored",
-                prefixURL: destinationPrefix,
-                pinnedEngineBuildID: manifest.requiredEngineBuildID,
-                provisionedEngineBuildID: source.provisionedEngineBuildID,
-                profileID: source.profileID,
-                graphicsBackend: manifest.snapshot.graphicsBackend,
-                windowsVersion: manifest.snapshot.windowsVersion,
-                enhancedSync: manifest.snapshot.enhancedSync
-            )
-            try await store.saveEnvironment(restoredEnvironment)
-
-            for sourceApplication in manifest.snapshot.applications {
-                let applicationID = StableID.derived(
-                    from: "restored:\(destinationID):\(sourceApplication.id)"
-                )
-                let sourceEntries = manifest.snapshot.launchEntries.filter {
-                    $0.applicationID == sourceApplication.id
-                }
-                let restoredEntries = sourceEntries.enumerated().map { index, sourceEntry in
-                    LaunchEntry(
-                        id: StableID.derived(from: "restored-launch:\(applicationID):\(index)"),
-                        applicationID: applicationID,
-                        executableURL: remap(
-                            sourceEntry.executableURL,
-                            from: source.prefixURL,
-                            to: destinationPrefix
-                        ),
-                        arguments: sourceEntry.arguments,
-                        workingDirectoryURL: sourceEntry.workingDirectoryURL.map {
-                            remap($0, from: source.prefixURL, to: destinationPrefix)
-                        }
-                    )
-                }
-                var application = LibraryApplication(
-                    id: applicationID,
-                    environmentID: destinationID,
-                    name: sourceApplication.name,
-                    category: sourceApplication.category,
-                    providerID: sourceApplication.providerID,
-                    providerItemID: sourceApplication.providerItemID,
-                    launchEntryIDs: restoredEntries.map(\.id),
-                    selectedProfileID: sourceApplication.selectedProfileID,
-                    isFavorite: sourceApplication.isFavorite,
-                    isHidden: sourceApplication.isHidden
-                )
-                application.lastLaunchedAt = nil
-                try await store.saveApplication(application, launchEntries: restoredEntries)
-            }
             await load()
-            selectedEnvironmentID = destinationID
+            selectedEnvironmentID = restoredEnvironment.id
             destination = .environments
         } catch {
-            if FileManager.default.fileExists(atPath: destinationPrefix.path) {
-                try? FileManager.default.removeItem(at: destinationPrefix)
-            }
             errorMessage = error.localizedDescription
         }
     }
@@ -908,15 +851,6 @@ final class AppModel: ObservableObject {
             deletionPreview = nil
             await load()
         } catch { errorMessage = error.localizedDescription }
-    }
-
-    private func remap(_ url: URL, from sourceRoot: URL, to destinationRoot: URL) -> URL {
-        let sourcePath = sourceRoot.standardizedFileURL.path
-        let path = url.standardizedFileURL.path
-        guard path == sourcePath || path.hasPrefix(sourcePath + "/") else { return url }
-        let relative = String(path.dropFirst(sourcePath.count))
-            .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        return relative.isEmpty ? destinationRoot : destinationRoot.appending(path: relative)
     }
 
     private func persist(_ id: UUID?, key: String) {

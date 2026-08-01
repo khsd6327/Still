@@ -22,3 +22,12 @@ creation fails if the system random source does not complete successfully.
 
 Still can inspect and restore format version 1 backups. New backups are always
 written in format version 2.
+
+## Restore behavior
+
+A restore creates a new managed Environment and remaps its application and
+launch-entry relationships to the new prefix. Still verifies the required
+engine and component versions before writing files. Prefix materialization and
+the complete Library update are journaled so an interrupted restore can either
+finish from a committed store document or remove its incomplete files on the
+next launch.
