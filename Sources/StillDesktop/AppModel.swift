@@ -4,7 +4,7 @@ import StillCore
 import UniformTypeIdentifiers
 
 private enum StabilizationGate {
-    static let physicalEnvironmentDeletionEnabled = false
+    static let physicalEnvironmentDeletionEnabled = true
     static let restoreEnabled = false
     static let encryptedBackupEnabled = false
 }
@@ -23,6 +23,11 @@ final class AppModel: ObservableObject {
     private let logRotationService = LogRotationService()
     private let supportBundleService = SupportBundleService()
     private let ownershipService = EnvironmentOwnershipService()
+    private lazy var deletionCoordinator = EnvironmentDeletionCoordinator(
+        store: store,
+        ownershipService: ownershipService,
+        rootURL: JSONStillStore.defaultRootURL()
+    )
 
     @Published var destination: SidebarDestination {
         didSet { UserDefaults.standard.set(destination.rawValue, forKey: "sidebarDestination") }
@@ -185,6 +190,7 @@ final class AppModel: ObservableObject {
         activityState = .loading
         do {
             _ = try logRotationService.rotate(retentionDays: logRetentionDays)
+            _ = try await deletionCoordinator.recoverInterruptedDeletions()
             _ = try await store.recoverInterruptedOperations()
             var document = try await store.load()
             environments = document.environments
@@ -602,11 +608,22 @@ final class AppModel: ObservableObject {
             let duplicate = try recoveryService.duplicate(
                 environment,
                 name: "\(environment.name) Copy",
-                managedRootURL: JSONBottleStore.defaultRootURL()
-                    .appending(path: "Environments", directoryHint: .isDirectory),
+                managedRootURL: ownershipService.managedRootURL,
                 activeSessions: sessions
             )
-            try await store.saveEnvironment(duplicate)
+            do {
+                let document = try await store.load()
+                try ownershipService.writeMarker(
+                    for: duplicate,
+                    storeIdentifier: document.storeIdentifier
+                )
+                try await store.saveEnvironment(duplicate)
+            } catch {
+                if FileManager.default.fileExists(atPath: duplicate.prefixURL.path) {
+                    try? FileManager.default.removeItem(at: duplicate.prefixURL)
+                }
+                throw error
+            }
             try operation.transition(to: .succeeded, resultSummary: "Environment duplicated")
             try await store.saveOperation(operation)
             await load()
@@ -683,6 +700,11 @@ final class AppModel: ObservableObject {
             return
         }
         do {
+            let document = try await store.load()
+            try ownershipService.validateManagedOwnership(
+                of: environment,
+                storeIdentifier: document.storeIdentifier
+            )
             deletionPreview = try recoveryService.deletionPreview(
                 environment: environment,
                 applications: applications
@@ -785,12 +807,18 @@ final class AppModel: ObservableObject {
     }
 
     func continueDeletion() async {
-        errorMessage = "Physical deletion is temporarily unavailable."
+        guard let preview = deletionPreview else { return }
+        if selectedDeletionMethod == .permanentlyDelete {
+            requiresPermanentDeletionConfirmation = true
+        } else {
+            await performDeletion(preview: preview, permanentConfirmed: false)
+        }
     }
 
     func confirmPermanentDeletion() async {
         requiresPermanentDeletionConfirmation = false
-        errorMessage = "Permanent deletion is temporarily unavailable."
+        guard let preview = deletionPreview else { return }
+        await performDeletion(preview: preview, permanentConfirmed: true)
     }
 
     private func performDeletion(
@@ -798,13 +826,19 @@ final class AppModel: ObservableObject {
         permanentConfirmed: Bool
     ) async {
         do {
-            _ = try recoveryService.delete(
-                preview: preview,
+            guard let environment = environments.first(where: {
+                $0.id == preview.environmentID
+            }) else {
+                throw StillCoreError.invalidStore(
+                    "The Environment selected for deletion no longer exists."
+                )
+            }
+            try await deletionCoordinator.delete(
+                environment: environment,
                 method: selectedDeletionMethod,
                 activeSessions: sessions,
                 finalPermanentConfirmation: permanentConfirmed
             )
-            try await store.deleteEnvironmentRecord(id: preview.environmentID)
             if rememberDeletionMethod {
                 UserDefaults.standard.set(selectedDeletionMethod.rawValue, forKey: "environmentDeletionMethod")
             }

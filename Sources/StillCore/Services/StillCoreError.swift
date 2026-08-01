@@ -38,6 +38,7 @@ public enum StillCoreError: LocalizedError, Equatable {
     case backupDecryptionFailed
     case unsafeArchivePath(String)
     case permanentDeletionConfirmationRequired
+    case deletionCleanupPending(URL)
     case verificationFailed(String)
 
     public var errorDescription: String? {
@@ -116,6 +117,8 @@ public enum StillCoreError: LocalizedError, Equatable {
             "The backup contains an unsafe path: \(path)"
         case .permanentDeletionConfirmationRequired:
             "Permanent deletion requires a final scope confirmation."
+        case .deletionCleanupPending(let url):
+            "The Environment was removed from Still, but file cleanup remains pending at: \(url.path)"
         case .verificationFailed(let reason):
             "File verification failed. \(reason)"
         }

@@ -159,31 +159,6 @@ final class RecoverySafetyTests: XCTestCase {
         )
     }
 
-    func testPermanentDeletionAlwaysRequiresFinalConfirmation() throws {
-        let root = temporaryRoot("Delete")
-        defer { try? FileManager.default.removeItem(at: root) }
-        let prefix = root.appending(path: "Prefix")
-        try write("data", to: prefix.appending(path: "file.txt"))
-        let environment = WindowsEnvironment(name: "Delete", prefixURL: prefix)
-        let service = EnvironmentRecoveryService()
-        let preview = try service.deletionPreview(environment: environment, applications: [])
-
-        XCTAssertThrowsError(try service.delete(
-            preview: preview,
-            method: .permanentlyDelete,
-            activeSessions: [],
-            finalPermanentConfirmation: false
-        ))
-        XCTAssertTrue(FileManager.default.fileExists(atPath: prefix.path))
-        _ = try service.delete(
-            preview: preview,
-            method: .permanentlyDelete,
-            activeSessions: [],
-            finalPermanentConfirmation: true
-        )
-        XCTAssertFalse(FileManager.default.fileExists(atPath: prefix.path))
-    }
-
     func testRepairInspectsBeforeApplyingAndRequiresRestorePoint() throws {
         let root = temporaryRoot("Repair")
         defer { try? FileManager.default.removeItem(at: root) }

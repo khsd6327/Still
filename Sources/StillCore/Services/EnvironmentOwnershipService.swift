@@ -21,7 +21,7 @@ public struct ManagedEnvironmentMarker: Codable, Equatable, Sendable {
     }
 }
 
-public struct EnvironmentOwnershipService {
+public struct EnvironmentOwnershipService: @unchecked Sendable {
     public static let markerFilename = ".still-environment.json"
 
     public let managedRootURL: URL
@@ -83,8 +83,22 @@ public struct EnvironmentOwnershipService {
                 "Environment '\(environment.id)' is not a verified managed Environment."
             )
         }
-        try requireRealDirectory(environment.prefixURL)
-        let markerURL = markerURL(for: environment.prefixURL)
+        try validateManagedMarker(
+            at: environment.prefixURL,
+            environmentID: environment.id,
+            storeIdentifier: storeIdentifier,
+            nonce: nonce
+        )
+    }
+
+    public func validateManagedMarker(
+        at prefixURL: URL,
+        environmentID: WindowsEnvironment.ID,
+        storeIdentifier: UUID,
+        nonce: UUID
+    ) throws {
+        try requireRealDirectory(prefixURL)
+        let markerURL = markerURL(for: prefixURL)
         let values = try markerURL.resourceValues(forKeys: [.isSymbolicLinkKey])
         guard values.isSymbolicLink != true else {
             throw StillCoreError.invalidStore("The Environment ownership marker is a symbolic link.")
@@ -94,7 +108,7 @@ public struct EnvironmentOwnershipService {
             from: Data(contentsOf: markerURL)
         )
         guard marker.version == ManagedEnvironmentMarker.currentVersion,
-              marker.environmentID == environment.id,
+              marker.environmentID == environmentID,
               marker.storeIdentifier == storeIdentifier,
               marker.nonce == nonce else {
             throw StillCoreError.invalidStore(

@@ -111,3 +111,53 @@ public enum MutationPhase: String, Codable, Sendable {
     case rollback
     case complete
 }
+
+public enum EnvironmentDeletionJournalState: String, Codable, Sendable {
+    case prepared
+    case quarantined
+    case storeCommitted
+    case cleanupPending
+    case rolledBack
+}
+
+public struct EnvironmentDeletionJournal: Codable, Equatable, Identifiable, Sendable {
+    public static let currentVersion = 1
+
+    public let version: Int
+    public let id: UUID
+    public let storeIdentifier: UUID
+    public let environmentID: WindowsEnvironment.ID
+    public let managementNonce: UUID
+    public let originalPrefixURL: URL
+    public let quarantineURL: URL
+    public let method: EnvironmentDeletionMethod
+    public var state: EnvironmentDeletionJournalState
+    public let createdAt: Date
+    public var updatedAt: Date
+
+    public init(
+        version: Int = Self.currentVersion,
+        id: UUID = UUID(),
+        storeIdentifier: UUID,
+        environmentID: WindowsEnvironment.ID,
+        managementNonce: UUID,
+        originalPrefixURL: URL,
+        quarantineURL: URL,
+        method: EnvironmentDeletionMethod,
+        state: EnvironmentDeletionJournalState = .prepared,
+        createdAt: Date = .now,
+        updatedAt: Date = .now
+    ) {
+        self.version = version
+        self.id = id
+        self.storeIdentifier = storeIdentifier
+        self.environmentID = environmentID
+        self.managementNonce = managementNonce
+        self.originalPrefixURL = originalPrefixURL
+        self.quarantineURL = quarantineURL
+        self.method = method
+        self.state = state
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
+}

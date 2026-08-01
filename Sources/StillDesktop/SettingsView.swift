@@ -166,7 +166,7 @@ struct SettingsView: View {
                     Text(JSONBottleStore.defaultRootURL().path)
                         .font(.caption.monospaced()).textSelection(.enabled)
                 }
-                LabeledContent("Environment deletion", value: "Temporarily unavailable")
+                LabeledContent("Environment deletion", value: "Managed Environments only")
                 Text("Environments can be removed from Still without changing their files.")
                     .font(.caption).foregroundStyle(.secondary)
             }

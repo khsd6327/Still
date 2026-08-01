@@ -59,6 +59,10 @@ struct EnvironmentsView: View {
                         Button("Remove from Still…", role: .destructive) {
                             model.requestEnvironmentRemoval(environment)
                         }
+                        Button("Delete Environment…", role: .destructive) {
+                            Task { await model.prepareDeletion(environment) }
+                        }
+                        .disabled(environment.ownership != .managed)
                     }
                 }
             }
@@ -103,6 +107,10 @@ struct EnvironmentsView: View {
                     Button("Remove from Still…", role: .destructive) {
                         model.requestEnvironmentRemoval(environment)
                     }
+                    Button("Delete Environment…", role: .destructive) {
+                        Task { await model.prepareDeletion(environment) }
+                    }
+                    .disabled(environment.ownership != .managed)
                 }
             }
             .disabled(model.selectedEnvironment == nil)

@@ -34,7 +34,9 @@ public struct EnvironmentRecoveryService {
             windowsVersion: environment.windowsVersion,
             enhancedSync: environment.enhancedSync,
             metalHUDEnabled: environment.metalHUDEnabled,
-            metalTraceEnabled: environment.metalTraceEnabled
+            metalTraceEnabled: environment.metalTraceEnabled,
+            ownership: .managed,
+            managementNonce: UUID()
         )
     }
 
@@ -53,31 +55,6 @@ public struct EnvironmentRecoveryService {
                 ? try FileTreeServices.directorySize(environment.prefixURL)
                 : 0
         )
-    }
-
-    public func delete(
-        preview: EnvironmentDeletionPreview,
-        method: EnvironmentDeletionMethod,
-        activeSessions: [LaunchSession],
-        finalPermanentConfirmation: Bool
-    ) throws -> URL? {
-        try requireStopped(preview.environmentID, sessions: activeSessions)
-        guard fileManager.fileExists(atPath: preview.prefixURL.path) else { return nil }
-        switch method {
-        case .moveToTrash:
-            var resultingURL: NSURL?
-            try fileManager.trashItem(
-                at: preview.prefixURL,
-                resultingItemURL: &resultingURL
-            )
-            return resultingURL as URL?
-        case .permanentlyDelete:
-            guard finalPermanentConfirmation else {
-                throw StillCoreError.permanentDeletionConfirmationRequired
-            }
-            try fileManager.removeItem(at: preview.prefixURL)
-            return nil
-        }
     }
 
     private func requireStopped(_ environmentID: UUID, sessions: [LaunchSession]) throws {

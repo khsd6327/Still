@@ -206,6 +206,33 @@ public actor JSONStillStore {
 
     public func deleteEnvironmentRecord(id: WindowsEnvironment.ID) throws {
         var document = try load()
+        removeEnvironmentRecord(id: id, from: &document)
+        try save(document)
+    }
+
+    public func commitManagedEnvironmentDeletion(
+        id: WindowsEnvironment.ID,
+        expectedPrefixURL: URL,
+        expectedManagementNonce: UUID
+    ) throws {
+        var document = try load()
+        guard let environment = document.environments.first(where: { $0.id == id }),
+              environment.ownership == .managed,
+              environment.prefixURL.standardizedFileURL
+                == expectedPrefixURL.standardizedFileURL,
+              environment.managementNonce == expectedManagementNonce else {
+            throw StillCoreError.invalidStore(
+                "The managed Environment changed while deletion was being committed."
+            )
+        }
+        removeEnvironmentRecord(id: id, from: &document)
+        try save(document)
+    }
+
+    private func removeEnvironmentRecord(
+        id: WindowsEnvironment.ID,
+        from document: inout StillStoreDocument
+    ) {
         let applicationIDs = Set(
             document.applications
                 .filter { $0.environmentID == id }
@@ -215,7 +242,6 @@ public actor JSONStillStore {
         document.applications.removeAll { applicationIDs.contains($0.id) }
         document.operations.removeAll { $0.environmentID == id }
         document.environments.removeAll { $0.id == id }
-        try save(document)
     }
 
     public func removeApplicationFromLibrary(id: LibraryApplication.ID) throws {

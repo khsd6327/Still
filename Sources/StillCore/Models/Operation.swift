@@ -11,6 +11,7 @@ public enum OperationKind: String, Codable, CaseIterable, Sendable {
     case createRestorePoint
     case backup
     case restore
+    case deleteEnvironment
 
     public var mutatesEnvironment: Bool { true }
 }
