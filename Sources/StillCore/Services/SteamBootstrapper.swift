@@ -55,7 +55,7 @@ public actor SteamBootstrapper {
         self.fileManager = fileManager
     }
 
-    public func bootstrap() async throws -> SteamBootstrapResult {
+    public func bootstrap(localInstallerURL: URL? = nil) async throws -> SteamBootstrapResult {
         let recipe = BundledApplicationRecipes.steam
         let manifest = try preferredInstalledManifest(for: recipe)
         guard let descriptor = await engineInstaller.installedDescriptor(
@@ -104,8 +104,14 @@ public actor SteamBootstrapper {
             )
         }
 
+        guard let localInstallerURL else {
+            throw StillCoreError.invalidWindowsInstaller(
+                URL(filePath: "SteamSetup.exe")
+            )
+        }
         let engine = LocalWineEngine(descriptor: descriptor)
         let session = try await applicationInstaller.install(
+            localInstallerURL: localInstallerURL,
             recipe: recipe,
             bottle: bottle,
             engine: engine

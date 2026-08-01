@@ -1,13 +1,15 @@
+import Darwin
 import Foundation
 
 public actor ProcessSupervisor {
     private struct ManagedProcess {
         let process: Process
         let logHandle: FileHandle
-        let session: LaunchSession
+        var session: LaunchSession
     }
 
     private var processes: [LaunchSession.ID: ManagedProcess] = [:]
+    private var completedSessions: [LaunchSession.ID: LaunchSession] = [:]
     private let fileManager: FileManager
 
     public init(fileManager: FileManager = .default) {
@@ -18,16 +20,42 @@ public actor ProcessSupervisor {
         try validate(plan)
         reapTerminatedProcesses()
 
-        let managed = try makeManagedProcess(plan)
-        try managed.process.run()
-        processes[managed.session.id] = managed
+        if let applicationID = plan.applicationID,
+           processes.values.contains(where: {
+               $0.session.applicationID == applicationID && $0.session.state.isActive
+           }) {
+            throw StillCoreError.duplicateLaunch(applicationID)
+        }
 
-        return LaunchSession(
-            id: managed.session.id,
-            processIdentifier: managed.process.processIdentifier,
-            startedAt: managed.session.startedAt,
-            logURL: managed.session.logURL
-        )
+        var managed = try makeManagedProcess(plan)
+        try managed.session.transition(to: .launching)
+        do {
+            try managed.process.run()
+            try managed.session.transition(
+                to: .running,
+                rootProcessIdentifier: managed.process.processIdentifier
+            )
+            managed.session.replaceAttributedProcesses([
+                AttributedProcess(
+                    processIdentifier: managed.process.processIdentifier,
+                    name: managed.process.executableURL?.lastPathComponent ?? "Wine",
+                    applicationID: plan.applicationID,
+                    environmentID: plan.environmentID,
+                    launchSessionID: plan.sessionID,
+                    isRootProcess: true
+                )
+            ])
+            processes[managed.session.id] = managed
+            return managed.session
+        } catch {
+            try? managed.session.transition(
+                to: .failed,
+                failureDescription: error.localizedDescription
+            )
+            completedSessions[managed.session.id] = managed.session
+            try? managed.logHandle.close()
+            throw error
+        }
     }
 
     @discardableResult
@@ -41,20 +69,61 @@ public actor ProcessSupervisor {
     }
 
     public func stop(sessionID: LaunchSession.ID) throws {
-        guard let managed = processes.removeValue(forKey: sessionID) else {
-            throw StillCoreError.sessionNotFound(sessionID)
-        }
-        if managed.process.isRunning {
-            managed.process.terminate()
-        }
-        try? managed.logHandle.close()
+        try terminate(sessionID: sessionID, force: false)
+    }
+
+    public func forceStop(sessionID: LaunchSession.ID) throws {
+        try terminate(sessionID: sessionID, force: true)
+    }
+
+    public func stopAll() {
+        terminateAll(force: false)
+    }
+
+    public func forceStopAll() {
+        terminateAll(force: true)
+    }
+
+    public func session(id: LaunchSession.ID) -> LaunchSession? {
+        reapTerminatedProcesses()
+        return processes[id]?.session ?? completedSessions[id]
     }
 
     public func activeSessions() -> [LaunchSession] {
         reapTerminatedProcesses()
         return processes.values
             .map(\.session)
+            .filter { $0.state.isActive }
             .sorted { $0.startedAt < $1.startedAt }
+    }
+
+    private func terminate(sessionID: LaunchSession.ID, force: Bool) throws {
+        reapTerminatedProcesses()
+        guard var managed = processes[sessionID] else {
+            throw StillCoreError.sessionNotFound(sessionID)
+        }
+        guard managed.session.state == .running else {
+            return
+        }
+        try managed.session.transition(to: .stopping)
+        processes[sessionID] = managed
+
+        if managed.process.isRunning {
+            if force {
+                Darwin.kill(managed.process.processIdentifier, SIGKILL)
+            } else {
+                managed.process.terminate()
+            }
+        }
+        reapTerminatedProcesses()
+    }
+
+    private func terminateAll(force: Bool) {
+        reapTerminatedProcesses()
+        let ids = processes.keys
+        for id in ids {
+            try? terminate(sessionID: id, force: force)
+        }
     }
 
     private func validate(_ plan: ProcessPlan) throws {
@@ -81,23 +150,37 @@ public actor ProcessSupervisor {
         process.standardOutput = logHandle
         process.standardError = logHandle
 
-        let session = LaunchSession(
-            id: plan.sessionID,
-            processIdentifier: 0,
-            logURL: plan.logURL
-        )
         return ManagedProcess(
             process: process,
             logHandle: logHandle,
-            session: session
+            session: LaunchSession(
+                id: plan.sessionID,
+                applicationID: plan.applicationID,
+                environmentID: plan.environmentID,
+                logURL: plan.logURL
+            )
         )
     }
 
     private func reapTerminatedProcesses() {
-        let terminated = processes.filter { !$0.value.process.isRunning }
-        for (id, managed) in terminated {
+        let terminatedIDs = processes.compactMap { id, managed in
+            managed.process.isRunning ? nil : id
+        }
+        for id in terminatedIDs {
+            guard var managed = processes.removeValue(forKey: id) else { continue }
+            if managed.session.state == .running {
+                try? managed.session.transition(
+                    to: .exited,
+                    exitCode: managed.process.terminationStatus
+                )
+            } else if managed.session.state == .stopping {
+                try? managed.session.transition(
+                    to: .exited,
+                    exitCode: managed.process.terminationStatus
+                )
+            }
+            completedSessions[id] = managed.session
             try? managed.logHandle.close()
-            processes.removeValue(forKey: id)
         }
     }
 }

@@ -9,6 +9,8 @@ final class ApplicationRecipeTests: XCTestCase {
         XCTAssertEqual(recipe.windowsVersion, .windows10)
         XCTAssertEqual(recipe.graphicsBackend, .wineD3D)
         XCTAssertNotNil(recipe.installer)
+        XCTAssertEqual(recipe.installer?.acceptedFileNames, ["steamsetup.exe"])
+        XCTAssertEqual(recipe.installer?.arguments, ["/S"])
         XCTAssertEqual(
             SteamBootstrapper.launchArguments(
                 for: Bottle(

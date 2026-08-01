@@ -6,38 +6,24 @@ public struct LaunchRequest: Hashable, Sendable {
     public var arguments: [String]
     public var environment: [String: String]
     public var workingDirectoryURL: URL?
+    public var applicationID: LibraryApplication.ID?
+    public var environmentID: WindowsEnvironment.ID?
 
     public init(
         bottle: Bottle,
         executableURL: URL,
         arguments: [String] = [],
         environment: [String: String] = [:],
-        workingDirectoryURL: URL? = nil
+        workingDirectoryURL: URL? = nil,
+        applicationID: LibraryApplication.ID? = nil,
+        environmentID: WindowsEnvironment.ID? = nil
     ) {
         self.bottle = bottle
         self.executableURL = executableURL
         self.arguments = arguments
         self.environment = environment
         self.workingDirectoryURL = workingDirectoryURL
+        self.applicationID = applicationID
+        self.environmentID = environmentID
     }
 }
-
-public struct LaunchSession: Codable, Hashable, Identifiable, Sendable {
-    public let id: UUID
-    public let processIdentifier: Int32
-    public let startedAt: Date
-    public let logURL: URL?
-
-    public init(
-        id: UUID = UUID(),
-        processIdentifier: Int32,
-        startedAt: Date = .now,
-        logURL: URL? = nil
-    ) {
-        self.id = id
-        self.processIdentifier = processIdentifier
-        self.startedAt = startedAt
-        self.logURL = logURL
-    }
-}
-

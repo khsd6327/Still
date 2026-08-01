@@ -1,20 +1,17 @@
 import Foundation
 
-public struct WindowsInstallerArtifact: Codable, Hashable, Sendable {
-    public let downloadURL: URL
-    public let allowedHosts: Set<String>
-    public let fileName: String
+public struct LocalInstallerRequirements: Codable, Hashable, Sendable {
+    public let acceptedFileNames: Set<String>
+    public let acceptedExtensions: Set<String>
     public let arguments: [String]
 
     public init(
-        downloadURL: URL,
-        allowedHosts: Set<String>,
-        fileName: String,
+        acceptedFileNames: Set<String> = [],
+        acceptedExtensions: Set<String> = ["exe", "msi"],
         arguments: [String] = []
     ) {
-        self.downloadURL = downloadURL
-        self.allowedHosts = allowedHosts
-        self.fileName = fileName
+        self.acceptedFileNames = acceptedFileNames
+        self.acceptedExtensions = acceptedExtensions
         self.arguments = arguments
     }
 }
@@ -26,7 +23,7 @@ public struct WindowsApplicationRecipe: Codable, Hashable, Identifiable, Sendabl
     public let preferredEngineFamily: EngineFamily
     public let windowsVersion: Bottle.WindowsVersion
     public let graphicsBackend: GraphicsBackend
-    public let installer: WindowsInstallerArtifact?
+    public let installer: LocalInstallerRequirements?
     public let supportStatus: String
 
     public init(
@@ -36,7 +33,7 @@ public struct WindowsApplicationRecipe: Codable, Hashable, Identifiable, Sendabl
         preferredEngineFamily: EngineFamily,
         windowsVersion: Bottle.WindowsVersion,
         graphicsBackend: GraphicsBackend,
-        installer: WindowsInstallerArtifact?,
+        installer: LocalInstallerRequirements?,
         supportStatus: String
     ) {
         self.id = id

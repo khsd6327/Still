@@ -1,30 +1,24 @@
 import Foundation
 
 public struct ApplicationLibraryScanner {
-    private let steamScanner: SteamLibraryScanner
-    private let executableScanner: WindowsExecutableScanner
+    private let coordinator: ApplicationDiscoveryCoordinator
 
     public init(
         steamScanner: SteamLibraryScanner = SteamLibraryScanner(),
         executableScanner: WindowsExecutableScanner = WindowsExecutableScanner()
     ) {
-        self.steamScanner = steamScanner
-        self.executableScanner = executableScanner
+        coordinator = ApplicationDiscoveryCoordinator(providers: [
+            SteamDiscoveryProvider(scanner: steamScanner),
+            ExecutableDiscoveryProvider(scanner: executableScanner)
+        ])
     }
 
     public func scan(bottle: Bottle) throws -> [InstalledWindowsApplication] {
-        let steamApplications = try steamScanner.scan(bottle: bottle)
-        let executableApplications = executableScanner.scan(bottle: bottle)
-
-        var applications = Dictionary(
-            uniqueKeysWithValues: steamApplications.map { ($0.id, $0) }
-        )
-        for application in executableApplications {
-            applications[application.id] = application
-        }
-
-        return applications.values.sorted {
-            $0.name.localizedStandardCompare($1.name) == .orderedAscending
-        }
+        let result = coordinator.discover(in: bottle)
+        return (result.accepted + result.requiresConfirmation)
+            .map(\.application)
+            .sorted {
+                $0.name.localizedStandardCompare($1.name) == .orderedAscending
+            }
     }
 }

@@ -25,6 +25,19 @@ public enum StillCoreError: LocalizedError, Equatable {
     case invalidPinnedApplication(URL)
     case unsupportedApplicationPinSchema(Int)
     case invalidCompatibilityConfiguration(String)
+    case invalidStore(String)
+    case invalidOperationTransition(from: String, to: String)
+    case environmentOperationInProgress(UUID, UUID)
+    case duplicateLaunch(UUID)
+    case unavailableCapability(String, String)
+    case engineChangeRequirementsNotMet(String)
+    case environmentMustBeStopped(UUID)
+    case restorePointLimitReached(Int)
+    case backupPasswordRequired
+    case backupDecryptionFailed
+    case unsafeArchivePath(String)
+    case permanentDeletionConfirmationRequired
+    case verificationFailed(String)
 
     public var errorDescription: String? {
         switch self {
@@ -76,6 +89,32 @@ public enum StillCoreError: LocalizedError, Equatable {
             "Application pin store schema \(version) is not supported."
         case .invalidCompatibilityConfiguration(let reason):
             "The bottle compatibility configuration is invalid. \(reason)"
+        case .invalidStore(let reason):
+            "The Still data store is invalid. \(reason)"
+        case .invalidOperationTransition(let from, let to):
+            "An Operation cannot transition from '\(from)' to '\(to)'."
+        case .environmentOperationInProgress(let environmentID, let operationID):
+            "Environment '\(environmentID)' is already being changed by Operation '\(operationID)'."
+        case .duplicateLaunch(let applicationID):
+            "Application '\(applicationID)' already has an active Launch Session."
+        case .unavailableCapability(let capability, let reason):
+            "Capability '\(capability)' is unavailable. \(reason)"
+        case .engineChangeRequirementsNotMet(let reason):
+            "The pinned engine cannot be changed. \(reason)"
+        case .environmentMustBeStopped(let id):
+            "Environment '\(id)' must be stopped before this operation."
+        case .restorePointLimitReached(let limit):
+            "The Restore Point limit of \(limit) was reached. Confirm cleanup before continuing."
+        case .backupPasswordRequired:
+            "This backup requires its password."
+        case .backupDecryptionFailed:
+            "The backup could not be decrypted with the supplied password."
+        case .unsafeArchivePath(let path):
+            "The backup contains an unsafe path: \(path)"
+        case .permanentDeletionConfirmationRequired:
+            "Permanent deletion requires a final scope confirmation."
+        case .verificationFailed(let reason):
+            "File verification failed. \(reason)"
         }
     }
 }

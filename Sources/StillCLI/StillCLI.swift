@@ -78,13 +78,18 @@ struct StillCLI {
             print("Installed \(descriptor.displayName)")
             print("Wine: \(descriptor.wineBinaryURL.path)")
         case "setup-steam":
+            guard arguments.count >= 2, !arguments[1].hasPrefix("--") else {
+                throw CLIError.missingLocalInstaller
+            }
             let bootstrapper = SteamBootstrapper(
                 bottleStore: store,
                 engineInstaller: EngineInstaller(
                     rootURL: engineRootURL(from: arguments)
                 )
             )
-            let result = try await bootstrapper.bootstrap()
+            let result = try await bootstrapper.bootstrap(
+                localInstallerURL: URL(filePath: arguments[1])
+            )
             print("Steam bottle: \(result.bottle.prefixURL.path)")
             if let executableURL = result.steamExecutableURL {
                 print("Steam is installed: \(executableURL.path)")
@@ -217,7 +222,8 @@ struct StillCLI {
               install-engine <id>  Download, verify, and install an engine.
               install-engine-archive <id> <path>
                                     Verify and install a local engine archive.
-              setup-steam           Create a GPTK bottle and install Steam.
+              setup-steam <local-exe>
+                                    Install Steam from a user-supplied local file.
               scan-apps [bottle-id] Scan Windows apps in one or all bottles.
               pin-app <bottle-id> <exe-path> [name]
                                     Add a manual executable to the app library.
@@ -240,6 +246,7 @@ private enum CLIError: LocalizedError {
     case missingBottleName
     case missingEngineID
     case missingEngineArchive
+    case missingLocalInstaller
     case missingPinArguments
     case missingUnpinArguments
     case missingSetEngineArguments
@@ -254,6 +261,8 @@ private enum CLIError: LocalizedError {
             "The install-engine command requires an engine ID."
         case .missingEngineArchive:
             "The install-engine-archive command requires an engine ID and archive path."
+        case .missingLocalInstaller:
+            "The setup-steam command requires a user-supplied local installer path."
         case .missingPinArguments:
             "The pin-app command requires a bottle ID and executable path."
         case .missingUnpinArguments:
