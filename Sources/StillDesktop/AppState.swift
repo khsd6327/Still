@@ -64,7 +64,7 @@ enum CloseRunningBehavior: String, CaseIterable {
     var title: String {
         switch self {
         case .ask: "Ask Every Time"
-        case .stopAndClose: "Stop Normally, Then Close"
+        case .stopAndClose: "Request Stop, Then Close"
         case .leaveRunning: "Leave Running"
         }
     }

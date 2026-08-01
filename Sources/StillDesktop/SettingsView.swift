@@ -166,15 +166,8 @@ struct SettingsView: View {
                     Text(JSONBottleStore.defaultRootURL().path)
                         .font(.caption.monospaced()).textSelection(.enabled)
                 }
-                Picker("Environment deletion", selection: $model.selectedDeletionMethod) {
-                    Text("Move to Trash").tag(EnvironmentDeletionMethod.moveToTrash)
-                    Text("Delete Permanently").tag(EnvironmentDeletionMethod.permanentlyDelete)
-                }
-                Toggle(
-                    "Skip the introductory deletion explanation",
-                    isOn: $model.suppressDeletionExplanation
-                )
-                Text("Permanent deletion always requires a final confirmation.")
+                LabeledContent("Environment deletion", value: "Temporarily unavailable")
+                Text("Environments can be removed from Still without changing their files.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("Logs") {

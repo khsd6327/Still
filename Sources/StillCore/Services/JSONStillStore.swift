@@ -137,6 +137,7 @@ public actor JSONStillStore {
         )
         document.launchEntries.removeAll { applicationIDs.contains($0.applicationID) }
         document.applications.removeAll { applicationIDs.contains($0.id) }
+        document.operations.removeAll { $0.environmentID == id }
         document.environments.removeAll { $0.id == id }
         try save(document)
     }

@@ -3,6 +3,12 @@ import Foundation
 import StillCore
 import UniformTypeIdentifiers
 
+private enum StabilizationGate {
+    static let physicalEnvironmentDeletionEnabled = false
+    static let restoreEnabled = false
+    static let encryptedBackupEnabled = false
+}
+
 @MainActor
 final class AppModel: ObservableObject {
     private let store = JSONStillStore()
@@ -54,6 +60,7 @@ final class AppModel: ObservableObject {
     @Published var showsDeveloperModeExplanation = false
     @Published var showsDeveloperDisableAudit = false
     @Published var deletionPreview: EnvironmentDeletionPreview?
+    @Published var pendingEnvironmentRemoval: WindowsEnvironment?
     @Published var selectedDeletionMethod: EnvironmentDeletionMethod {
         didSet { UserDefaults.standard.set(selectedDeletionMethod.rawValue, forKey: "environmentDeletionMethod") }
     }
@@ -295,7 +302,7 @@ final class AppModel: ObservableObject {
             return
         }
         installState = .loading
-        var operation = StillOperation(kind: .installApplication, environmentID: environment.id)
+        var operation = StillOperation(kind: .launchInstaller, environmentID: environment.id)
         do {
             var effectiveEnvironment = environment
             let installerArguments: [String]
@@ -623,6 +630,10 @@ final class AppModel: ObservableObject {
         encrypted: Bool,
         password: String?
     ) async {
+        guard !encrypted || StabilizationGate.encryptedBackupEnabled else {
+            errorMessage = "Encrypted backup is temporarily unavailable while its password protection is being upgraded."
+            return
+        }
         var operation = StillOperation(kind: .backup, environmentID: environment.id)
         do {
             try operation.transition(to: .running)
@@ -654,6 +665,10 @@ final class AppModel: ObservableObject {
     }
 
     func prepareDeletion(_ environment: WindowsEnvironment) async {
+        guard StabilizationGate.physicalEnvironmentDeletionEnabled else {
+            errorMessage = "Physical deletion is temporarily unavailable until Still can prove Environment ownership and roll back interrupted file operations. Use Remove from Still to keep the files in place."
+            return
+        }
         do {
             deletionPreview = try recoveryService.deletionPreview(
                 environment: environment,
@@ -663,6 +678,10 @@ final class AppModel: ObservableObject {
     }
 
     func restoreBackup(at backupURL: URL, password: String?) async {
+        guard StabilizationGate.restoreEnabled else {
+            errorMessage = "Restore is temporarily unavailable while transactional restore and rollback are being implemented."
+            return
+        }
         let destinationID = UUID()
         let destinationPrefix = JSONBottleStore.defaultRootURL()
             .appending(path: "Environments", directoryHint: .isDirectory)
@@ -736,19 +755,29 @@ final class AppModel: ObservableObject {
         }
     }
 
-    func continueDeletion() async {
-        guard let deletionPreview else { return }
-        if selectedDeletionMethod == .permanentlyDelete {
-            requiresPermanentDeletionConfirmation = true
-            return
+    func requestEnvironmentRemoval(_ environment: WindowsEnvironment) {
+        pendingEnvironmentRemoval = environment
+    }
+
+    func confirmEnvironmentRemoval() async {
+        guard let environment = pendingEnvironmentRemoval else { return }
+        do {
+            try await store.deleteEnvironmentRecord(id: environment.id)
+            pendingEnvironmentRemoval = nil
+            await load()
+            activityState = .success("\(environment.name) was removed from Still. Its files were not changed.")
+        } catch {
+            errorMessage = error.localizedDescription
         }
-        await performDeletion(preview: deletionPreview, permanentConfirmed: false)
+    }
+
+    func continueDeletion() async {
+        errorMessage = "Physical deletion is temporarily unavailable."
     }
 
     func confirmPermanentDeletion() async {
-        guard let deletionPreview else { return }
         requiresPermanentDeletionConfirmation = false
-        await performDeletion(preview: deletionPreview, permanentConfirmed: true)
+        errorMessage = "Permanent deletion is temporarily unavailable."
     }
 
     private func performDeletion(

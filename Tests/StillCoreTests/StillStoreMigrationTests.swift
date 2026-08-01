@@ -195,6 +195,50 @@ final class StillStoreMigrationTests: XCTestCase {
         XCTAssertEqual(document.launchEntries, [entry])
     }
 
+    func testRemovingEnvironmentRecordLeavesPrefixAndRemovesRelatedRecords() async throws {
+        let root = temporaryRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let prefix = root.appending(path: "External Prefix")
+        try FileManager.default.createDirectory(at: prefix, withIntermediateDirectories: true)
+        let marker = prefix.appending(path: "user.reg")
+        try Data("external".utf8).write(to: marker)
+
+        let store = JSONStillStore(rootURL: root.appending(path: "Store"))
+        let environment = WindowsEnvironment(name: "External", prefixURL: prefix)
+        try await store.saveEnvironment(environment)
+
+        let applicationID = UUID()
+        let entryID = UUID()
+        let application = LibraryApplication(
+            id: applicationID,
+            environmentID: environment.id,
+            name: "Example",
+            launchEntryIDs: [entryID]
+        )
+        let entry = LaunchEntry(
+            id: entryID,
+            applicationID: applicationID,
+            executableURL: prefix.appending(path: "drive_c/Example.exe")
+        )
+        try await store.saveApplication(application, launchEntries: [entry])
+        var operation = StillOperation(
+            kind: .launchInstaller,
+            environmentID: environment.id
+        )
+        try operation.transition(to: .running)
+        try operation.transition(to: .succeeded, resultSummary: "Installer launched")
+        try await store.saveOperation(operation)
+
+        try await store.deleteEnvironmentRecord(id: environment.id)
+
+        let document = try await store.load()
+        XCTAssertTrue(FileManager.default.fileExists(atPath: marker.path))
+        XCTAssertTrue(document.environments.isEmpty)
+        XCTAssertTrue(document.applications.isEmpty)
+        XCTAssertTrue(document.launchEntries.isEmpty)
+        XCTAssertTrue(document.operations.isEmpty)
+    }
+
     private func application(
         id: String,
         executableURL: URL

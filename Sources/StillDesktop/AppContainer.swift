@@ -93,7 +93,7 @@ struct AppContainer: View {
                 .frame(width: 92)
 
                 if model.selectedSession != nil {
-                    Button("Stop", systemImage: "stop.fill") {
+                    Button("Request Stop", systemImage: "stop.fill") {
                         Task { await model.stopSelectedNormally() }
                     }
                 } else {

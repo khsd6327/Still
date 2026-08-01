@@ -26,13 +26,13 @@ struct StillCommands: Commands {
         }
 
         CommandMenu("Process") {
-            Button("Stop") {
+            Button("Request Stop") {
                 Task { await model.stopSelectedNormally() }
             }
             .keyboardShortcut("k", modifiers: [.command, .option])
             .disabled(model.selectedSession == nil)
 
-            Button("Stop All") {
+            Button("Request Stop All") {
                 Task { await model.stopAllNormally() }
             }
             .keyboardShortcut("k", modifiers: [.command, .option, .shift])

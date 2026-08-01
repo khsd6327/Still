@@ -12,7 +12,7 @@ final class StillApplicationDelegate: NSObject, NSApplicationDelegate {
         alert.messageText = "Windows applications are still running."
         alert.informativeText = "Choose whether to leave them running, stop them normally, or cancel quitting Still."
         alert.addButton(withTitle: "Leave Running and Quit")
-        alert.addButton(withTitle: "Stop Normally and Quit")
+        alert.addButton(withTitle: "Request Stop and Quit")
         alert.addButton(withTitle: "Cancel")
         switch alert.runModal() {
         case .alertFirstButtonReturn:
@@ -90,7 +90,7 @@ struct WindowCloseGuard: NSViewRepresentable {
             let alert = NSAlert()
             alert.messageText = "Windows applications are still running."
             alert.informativeText = "Stop them normally before closing the window?"
-            alert.addButton(withTitle: "Stop Normally and Close")
+            alert.addButton(withTitle: "Request Stop and Close")
             alert.addButton(withTitle: "Leave Running")
             alert.addButton(withTitle: "Cancel")
             let remember = NSButton(checkboxWithTitle: "Remember This Choice", target: nil, action: nil)

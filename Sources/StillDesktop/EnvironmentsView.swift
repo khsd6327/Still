@@ -49,12 +49,12 @@ struct EnvironmentsView: View {
                         Button("Inspect and Repair…") {
                             Task { await model.inspectRepair(environment) }
                         }
-                        Button("Export Backup…") {
+                        Button("Export Partial Data…") {
                             backupEnvironment = environment
                         }
                         Divider()
-                        Button("Delete Environment…", role: .destructive) {
-                            Task { await model.prepareDeletion(environment) }
+                        Button("Remove from Still…", role: .destructive) {
+                            model.requestEnvironmentRemoval(environment)
                         }
                     }
                 }
@@ -69,9 +69,9 @@ struct EnvironmentsView: View {
             Button("Import", systemImage: "square.and.arrow.down") {
                 Task { await model.importEnvironment() }
             }
-            Button("Restore Backup", systemImage: "arrow.counterclockwise") {
-                showsRestoreBackup = true
-            }
+            Button("Restore Unavailable", systemImage: "arrow.counterclockwise") {}
+                .disabled(true)
+                .help("Restore is temporarily unavailable while transactional rollback is being implemented.")
             Button("Create", systemImage: "plus") {
                 Task { await model.createEnvironment() }
             }
@@ -93,12 +93,12 @@ struct EnvironmentsView: View {
                     Button("Inspect and Repair…") {
                         Task { await model.inspectRepair(environment) }
                     }
-                    Button("Export Backup…") {
+                    Button("Export Partial Data…") {
                         backupEnvironment = environment
                     }
                     Divider()
-                    Button("Delete Environment…", role: .destructive) {
-                        Task { await model.prepareDeletion(environment) }
+                    Button("Remove from Still…", role: .destructive) {
+                        model.requestEnvironmentRemoval(environment)
                     }
                 }
             }
@@ -118,6 +118,21 @@ struct EnvironmentsView: View {
         }
         .sheet(item: $model.deletionPreview) { preview in
             DeletionPreviewView(model: model, preview: preview)
+        }
+        .confirmationDialog(
+            "Remove \(model.pendingEnvironmentRemoval?.name ?? "Environment") from Still?",
+            isPresented: Binding(
+                get: { model.pendingEnvironmentRemoval != nil },
+                set: { if !$0 { model.pendingEnvironmentRemoval = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Remove from Still", role: .destructive) {
+                Task { await model.confirmEnvironmentRemoval() }
+            }
+            Button("Cancel", role: .cancel) { model.pendingEnvironmentRemoval = nil }
+        } message: {
+            Text("Still will remove this Environment and its Library entries. Files at the registered path will remain unchanged.")
         }
         .alert(
             "Permanently delete \(model.deletionPreview?.environmentName ?? "Environment")?",
@@ -243,11 +258,14 @@ private struct BackupExportView: View {
             }
             Section("Protection") {
                 Toggle("Encrypt with a password", isOn: $encrypted)
+                    .disabled(true)
                 if encrypted {
                     SecureField("Backup password", text: $password)
                     Text("This password cannot be recovered by Still.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
+                Text("Password protection is temporarily unavailable while its key derivation is being upgraded.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
             Section {
                 HStack {
@@ -265,8 +283,8 @@ private struct BackupExportView: View {
 
     private func chooseDestination() {
         let panel = NSSavePanel()
-        panel.title = "Export Still Backup"
-        panel.nameFieldStringValue = "\(environment.name).stillbackup"
+        panel.title = "Export Experimental Partial Data"
+        panel.nameFieldStringValue = "\(environment.name).stillpartial"
         guard panel.runModal() == .OK, let url = panel.url else { return }
         dismiss()
         Task {

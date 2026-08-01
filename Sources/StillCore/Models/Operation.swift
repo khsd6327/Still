@@ -3,6 +3,7 @@ import Foundation
 public enum OperationKind: String, Codable, CaseIterable, Sendable {
     case createEnvironment
     case importEnvironment
+    case launchInstaller
     case installApplication
     case installComponent
     case repair
