@@ -271,6 +271,31 @@ final class StillStoreMigrationTests: XCTestCase {
         XCTAssertGreaterThan(reloaded.revision, staleDocument.revision)
     }
 
+    func testMissingStoreIdentifierIsPersistedOnLoad() async throws {
+        let root = temporaryRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let storeURL = root.appending(path: "store.json")
+        let document = StillStoreDocument()
+        let encoded = try JSONEncoder().encode(document)
+        var object = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: encoded) as? [String: Any]
+        )
+        object.removeValue(forKey: "storeIdentifier")
+        try JSONSerialization.data(withJSONObject: object).write(to: storeURL)
+
+        let store = JSONStillStore(rootURL: root)
+        let first = try await store.load()
+        let second = try await store.load()
+        let persisted = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: Data(contentsOf: storeURL))
+                as? [String: Any]
+        )
+
+        XCTAssertEqual(first.storeIdentifier, second.storeIdentifier)
+        XCTAssertEqual(persisted["storeIdentifier"] as? String, first.storeIdentifier.uuidString)
+    }
+
     func testCorruptStoreIsPreservedWithoutOverwrite() async throws {
         let root = temporaryRoot()
         defer { try? FileManager.default.removeItem(at: root) }

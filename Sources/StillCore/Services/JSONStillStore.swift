@@ -68,6 +68,14 @@ public actor JSONStillStore {
             guard document.schemaVersion == StillStoreDocument.currentSchemaVersion else {
                 throw StillCoreError.unsupportedSchema(document.schemaVersion)
             }
+            if try !containsStoreIdentifier(data) {
+                do {
+                    try save(document)
+                } catch StillCoreError.concurrentStoreModification {
+                    return try load()
+                }
+                return try load()
+            }
             return document
         }
 
@@ -83,6 +91,13 @@ public actor JSONStillStore {
         }
         try save(document)
         return try load()
+    }
+
+    private func containsStoreIdentifier(_ data: Data) throws -> Bool {
+        guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw StillCoreError.invalidStore("The current store is not a JSON object.")
+        }
+        return object["storeIdentifier"] != nil
     }
 
     public func save(_ document: StillStoreDocument) throws {

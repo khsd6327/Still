@@ -26,6 +26,9 @@ struct EnvironmentsView: View {
                             .font(.caption.monospaced())
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
+                        Text(environment.ownership.displayName)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
                     .tag(environment.id)
                     .accessibilityElement(children: .ignore)

@@ -22,6 +22,7 @@ final class AppModel: ObservableObject {
     private let repairService = RepairService()
     private let logRotationService = LogRotationService()
     private let supportBundleService = SupportBundleService()
+    private let ownershipService = EnvironmentOwnershipService()
 
     @Published var destination: SidebarDestination {
         didSet { UserDefaults.standard.set(destination.rawValue, forKey: "sidebarDestination") }
@@ -245,18 +246,29 @@ final class AppModel: ObservableObject {
             let resolvedName = displayName?.isEmpty == false
                 ? displayName!
                 : "Environment \(environments.count + 1)"
-            let root = JSONBottleStore.defaultRootURL()
-                .appending(path: "Environments", directoryHint: .isDirectory)
-                .appending(path: environmentID.uuidString, directoryHint: .isDirectory)
-            try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+            let root = ownershipService.managedPrefixURL(for: environmentID)
+            let document = try await store.load()
             let environment = WindowsEnvironment(
                 id: environmentID,
                 name: resolvedName,
                 prefixURL: root,
                 pinnedEngineBuildID: engine.id,
-                provisionedEngineBuildID: engine.id
+                provisionedEngineBuildID: engine.id,
+                ownership: .managed,
+                managementNonce: UUID()
             )
-            try await store.saveEnvironment(environment)
+            do {
+                try ownershipService.writeMarker(
+                    for: environment,
+                    storeIdentifier: document.storeIdentifier
+                )
+                try await store.saveEnvironment(environment)
+            } catch {
+                if FileManager.default.fileExists(atPath: root.path) {
+                    try? FileManager.default.removeItem(at: root)
+                }
+                throw error
+            }
             installDraft.environmentID = environment.id
             selectedEnvironmentID = environment.id
             await load()
@@ -281,7 +293,8 @@ final class AppModel: ObservableObject {
                 name: prefixURL.lastPathComponent,
                 prefixURL: prefixURL,
                 pinnedEngineBuildID: installedEngines.first?.id,
-                provisionedEngineBuildID: installedEngines.first?.id
+                provisionedEngineBuildID: installedEngines.first?.id,
+                ownership: .importedInPlace
             )
             try await store.saveEnvironment(environment)
             await load()

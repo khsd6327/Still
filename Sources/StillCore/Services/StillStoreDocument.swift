@@ -4,6 +4,7 @@ public struct StillStoreDocument: Codable, Equatable, Sendable {
     public static let currentSchemaVersion = 2
 
     public let schemaVersion: Int
+    public let storeIdentifier: UUID
     public var revision: UInt64
     public var environments: [WindowsEnvironment]
     public var applications: [LibraryApplication]
@@ -14,6 +15,7 @@ public struct StillStoreDocument: Codable, Equatable, Sendable {
 
     public init(
         schemaVersion: Int = Self.currentSchemaVersion,
+        storeIdentifier: UUID = UUID(),
         revision: UInt64 = 0,
         environments: [WindowsEnvironment] = [],
         applications: [LibraryApplication] = [],
@@ -23,6 +25,7 @@ public struct StillStoreDocument: Codable, Equatable, Sendable {
         operations: [StillOperation] = []
     ) {
         self.schemaVersion = schemaVersion
+        self.storeIdentifier = storeIdentifier
         self.revision = revision
         self.environments = environments
         self.applications = applications
@@ -33,13 +36,17 @@ public struct StillStoreDocument: Codable, Equatable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case schemaVersion, revision, environments, applications, launchEntries
+        case schemaVersion, storeIdentifier, revision, environments, applications, launchEntries
         case engineBuilds, components, operations
     }
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         schemaVersion = try container.decode(Int.self, forKey: .schemaVersion)
+        storeIdentifier = try container.decodeIfPresent(
+            UUID.self,
+            forKey: .storeIdentifier
+        ) ?? UUID()
         revision = try container.decodeIfPresent(UInt64.self, forKey: .revision) ?? 0
         environments = try container.decode([WindowsEnvironment].self, forKey: .environments)
         applications = try container.decode([LibraryApplication].self, forKey: .applications)
