@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import Metal
 import StillCore
 import UniformTypeIdentifiers
 
@@ -23,6 +24,8 @@ final class AppModel: ObservableObject {
     private let logRotationService = LogRotationService()
     private let supportBundleService = SupportBundleService()
     private let ownershipService = EnvironmentOwnershipService()
+    private let compatibilityResolver = CompatibilityResolver()
+    private let profileMatcher = CompatibilityProfileMatcher()
     private lazy var deletionCoordinator = EnvironmentDeletionCoordinator(
         store: store,
         ownershipService: ownershipService,
@@ -421,21 +424,54 @@ final class AppModel: ObservableObject {
                 )
             }
             let engine = try engine(for: environment)
-            let bottle = bottle(from: environment)
-            let launchEnvironment = application.selectedProfileID
-                == BundledCompatibilityProfiles.steam.id
-                ? SteamBootstrapper.launchEnvironment(
-                    for: bottle,
-                    executableURL: entry.executableURL
+            let document = try await store.load()
+            let engineBuild = try runtimeBuild(for: engine)
+            let profile = profileMatcher.profile(
+                for: application,
+                executableURL: entry.executableURL,
+                profiles: BundledCompatibilityProfiles.all
+            )
+            let effective = try compatibilityResolver.resolve(
+                environment: environment,
+                profile: profile,
+                engineFamily: engineBuild.family,
+                registry: CapabilityRegistry(
+                    host: currentHostCapabilities(),
+                    engine: engineBuild,
+                    components: document.components
                 )
-                : [:]
+            )
+            var effectiveEnvironment = environment
+            effectiveEnvironment.windowsVersion = effective.windowsVersion.value
+            effectiveEnvironment.graphicsBackend = effective.graphicsBackend.value
+            effectiveEnvironment.enhancedSync = effective.enhancedSync.value
+            let effectiveBottle = bottle(from: effectiveEnvironment)
+            var launchEnvironment = effective.environmentVariables.mapValues(\.value)
+            var resolvedArguments = entry.arguments
+            if profile?.id == BundledCompatibilityProfiles.steam.id {
+                launchEnvironment.merge(
+                    SteamBootstrapper.launchEnvironment(
+                        for: effectiveBottle,
+                        executableURL: entry.executableURL
+                    ),
+                    uniquingKeysWith: { _, profileValue in profileValue }
+                )
+                resolvedArguments = mergedArguments(
+                    resolvedArguments,
+                    SteamBootstrapper.launchArguments(for: effectiveBottle)
+                )
+            }
+            resolvedArguments = mergedArguments(
+                resolvedArguments,
+                effective.launchArguments
+            )
             let session = try await LocalWineEngine(
                 descriptor: engine,
                 processSupervisor: supervisor
             ).launch(LaunchRequest(
-                bottle: bottle,
+                bottle: effectiveBottle,
                 executableURL: entry.executableURL,
-                arguments: entry.arguments,
+                arguments: resolvedArguments,
                 environment: launchEnvironment,
                 workingDirectoryURL: entry.workingDirectoryURL,
                 applicationID: application.id,
@@ -872,6 +908,44 @@ final class AppModel: ObservableObject {
         return engine
     }
 
+    private func runtimeBuild(for engine: EngineDescriptor) throws -> EngineBuild {
+        let manifest = try BundledEngineCatalog.manifest(id: engine.id)
+        return EngineBuild(
+            id: engine.id,
+            family: manifest.family,
+            displayName: engine.displayName,
+            version: engine.version,
+            installURL: engine.wineBinaryURL.deletingLastPathComponent(),
+            capabilities: engine.capabilities,
+            manifestID: manifest.id
+        )
+    }
+
+    private func currentHostCapabilities() -> HostCapabilitySnapshot {
+#if arch(arm64)
+        let architecture = HostCapabilitySnapshot.Architecture.arm64
+        let supportsRosetta = FileManager.default.fileExists(
+            atPath: "/Library/Apple/usr/libexec/oah/libRosettaRuntime"
+        )
+#else
+        let architecture = HostCapabilitySnapshot.Architecture.x86_64
+        let supportsRosetta = true
+#endif
+        return HostCapabilitySnapshot(
+            architecture: architecture,
+            supportsMetal: MTLCreateSystemDefaultDevice() != nil,
+            supportsRosetta: supportsRosetta
+        )
+    }
+
+    private func mergedArguments(_ base: [String], _ additions: [String]) -> [String] {
+        var result = base
+        for argument in additions where !result.contains(argument) {
+            result.append(argument)
+        }
+        return result
+    }
+
     private func bottle(from environment: WindowsEnvironment) -> Bottle {
         Bottle(
             id: environment.id,
@@ -900,7 +974,7 @@ final class AppModel: ObservableObject {
         )
         let entryID = StableID.derived(from: "launch:\(applicationID):primary")
         let existing = applications.first { $0.id == applicationID }
-        let application = LibraryApplication(
+        var application = LibraryApplication(
             id: applicationID,
             environmentID: environment.id,
             name: item.name,
@@ -908,14 +982,17 @@ final class AppModel: ObservableObject {
             providerID: candidate.providerID,
             providerItemID: item.sourceIdentifier ?? item.id,
             launchEntryIDs: [entryID],
-            selectedProfileID: candidate.providerID == "steam"
-                ? BundledCompatibilityProfiles.steam.id
-                : existing?.selectedProfileID,
+            selectedProfileID: nil,
             isFavorite: existing?.isFavorite ?? false,
             isHidden: existing?.isHidden ?? false,
             lastLaunchedAt: existing?.lastLaunchedAt,
             providerManagedState: candidate.providerManagedState
         )
+        application.selectedProfileID = profileMatcher.profile(
+            for: application,
+            executableURL: item.launcherURL,
+            profiles: BundledCompatibilityProfiles.all
+        )?.id ?? (existing?.selectedProfileID == "custom" ? "custom" : nil)
         try await store.saveApplication(application, launchEntries: [
             LaunchEntry(
                 id: entryID,

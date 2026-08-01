@@ -117,6 +117,61 @@ final class CompatibilityFoundationTests: XCTestCase {
         XCTAssertFalse(encoded.contains("script"))
     }
 
+    func testProfileEngineFamilyIsEnforced() {
+        let environment = WindowsEnvironment(
+            name: "Test",
+            prefixURL: URL(filePath: "/tmp/Test")
+        )
+        let profile = CompatibilityProfile(
+            id: "staging-only",
+            displayName: "Staging Only",
+            matchRules: [],
+            requiredEngineFamily: .wineStaging
+        )
+
+        XCTAssertThrowsError(try CompatibilityResolver().resolve(
+            environment: environment,
+            profile: profile,
+            engineFamily: .gamePortingToolkit,
+            registry: makeRegistry(
+                engineCapabilities: [.win64],
+                componentCapabilities: []
+            )
+        ))
+    }
+
+    func testSteamProfileMatchesClientButNotSteamGames() {
+        let matcher = CompatibilityProfileMatcher()
+        let environmentID = UUID()
+        let client = LibraryApplication(
+            environmentID: environmentID,
+            name: "Steam",
+            providerID: "steam",
+            selectedProfileID: BundledCompatibilityProfiles.steam.id
+        )
+        let game = LibraryApplication(
+            environmentID: environmentID,
+            name: "Game",
+            providerID: "steam",
+            providerItemID: "123",
+            selectedProfileID: BundledCompatibilityProfiles.steam.id
+        )
+
+        XCTAssertEqual(
+            matcher.profile(
+                for: client,
+                executableURL: URL(filePath: "/tmp/steam.exe"),
+                profiles: BundledCompatibilityProfiles.all
+            )?.id,
+            BundledCompatibilityProfiles.steam.id
+        )
+        XCTAssertNil(matcher.profile(
+            for: game,
+            executableURL: URL(filePath: "/tmp/steam.exe-placeholder/game.exe"),
+            profiles: BundledCompatibilityProfiles.all
+        ))
+    }
+
     func testEnginePinChangeRequiresStopApprovalAndRestorePoint() async throws {
         let rootURL = FileManager.default.temporaryDirectory
             .appending(path: "StillEnginePinTests")

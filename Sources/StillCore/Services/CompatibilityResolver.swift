@@ -8,9 +8,16 @@ public struct CompatibilityResolver: Sendable {
         profile: CompatibilityProfile? = nil,
         applicationOverrides: CompatibilitySettings = CompatibilitySettings(),
         launchOverrides: CompatibilitySettings = CompatibilitySettings(),
+        engineFamily: EngineFamily? = nil,
         registry: CapabilityRegistry
     ) throws -> EffectiveCompatibility {
         if let profile {
+            if let requiredFamily = profile.requiredEngineFamily,
+               engineFamily != requiredFamily {
+                throw StillCoreError.invalidCompatibilityConfiguration(
+                    "Profile '\(profile.id)' requires engine family '\(requiredFamily.rawValue)'."
+                )
+            }
             try registry.require(profile.requiredCapabilities)
         }
 
