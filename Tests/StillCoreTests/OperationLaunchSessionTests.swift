@@ -198,6 +198,39 @@ final class OperationLaunchSessionTests: XCTestCase {
         XCTAssertTrue(activeSessions.isEmpty)
     }
 
+    func testTerminationPlanSurvivesExitedMonitorProcess() async throws {
+        let rootURL = temporaryRoot("ExitedMonitor")
+        defer { try? FileManager.default.removeItem(at: rootURL) }
+        try FileManager.default.createDirectory(at: rootURL, withIntermediateDirectories: true)
+        let markerURL = rootURL.appending(path: "stopped")
+        let termination = ProcessTerminationPlan(
+            scopeIdentifier: rootURL.path,
+            gracefulExecutableURL: URL(filePath: "/usr/bin/touch"),
+            gracefulArguments: [markerURL.path],
+            forceExecutableURL: URL(filePath: "/usr/bin/touch"),
+            forceArguments: [markerURL.path],
+            monitorExecutableURL: URL(filePath: "/usr/bin/true"),
+            environment: [:],
+            workingDirectoryURL: rootURL,
+            acceptedExitCodes: [0]
+        )
+        let supervisor = ProcessSupervisor()
+        let session = try await supervisor.launch(ProcessPlan(
+            applicationID: UUID(),
+            environmentID: UUID(),
+            executableURL: URL(filePath: "/usr/bin/true"),
+            arguments: [],
+            logURL: rootURL.appending(path: "launch.log"),
+            terminationPlan: termination
+        ))
+        try await Task.sleep(for: .milliseconds(20))
+        _ = await supervisor.session(id: session.id)
+
+        try await supervisor.stop(sessionID: session.id)
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: markerURL.path))
+    }
+
     private func temporaryRoot(_ name: String) -> URL {
         FileManager.default.temporaryDirectory
             .appending(path: "Still\(name)Tests")
