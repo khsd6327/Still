@@ -130,4 +130,47 @@ final class SteamLibraryScannerTests: XCTestCase {
 
         XCTAssertTrue(applications.isEmpty)
     }
+
+    func testMalformedManifestDoesNotSuppressValidGames() throws {
+        let prefixURL = temporaryURL.appending(path: "prefix")
+        let steamURL = prefixURL.appending(
+            path: "drive_c/Program Files (x86)/Steam"
+        )
+        let steamAppsURL = steamURL.appending(path: "steamapps")
+        let installURL = steamAppsURL.appending(path: "common/Valid Game")
+        try FileManager.default.createDirectory(
+            at: installURL,
+            withIntermediateDirectories: true
+        )
+        FileManager.default.createFile(
+            atPath: steamURL.appending(path: "steam.exe").path,
+            contents: Data("MZ".utf8)
+        )
+        try #""AppState" { "appid""#.write(
+            to: steamAppsURL.appending(path: "appmanifest_100.acf"),
+            atomically: true,
+            encoding: .utf8
+        )
+        let validManifest = #"""
+        "AppState"
+        {
+            "appid" "200"
+            "name" "Valid Game"
+            "StateFlags" "4"
+            "installdir" "Valid Game"
+        }
+        """#
+        try validManifest.write(
+            to: steamAppsURL.appending(path: "appmanifest_200.acf"),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let applications = try SteamLibraryScanner().scan(
+            bottle: Bottle(name: "Steam", prefixURL: prefixURL)
+        )
+
+        XCTAssertEqual(applications.map(\.id), ["steam-200"])
+        XCTAssertEqual(applications.first?.name, "Valid Game")
+    }
 }

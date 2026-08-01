@@ -73,41 +73,49 @@ public struct SteamLibraryScanner {
                 && $0.pathExtension == "acf"
         }
 
-        return try manifestURLs.compactMap { manifestURL in
-            let text = try String(contentsOf: manifestURL, encoding: .utf8)
-            let document = try parser.parse(text)
-            guard let appState = document["AppState"],
-                  let appID = appState["appid"]?.stringValue,
-                  !Self.nonUserFacingAppIDs.contains(appID),
-                  let name = appState["name"]?.stringValue,
-                  let installDirectory = appState["installdir"]?.stringValue else {
-                return nil
+        var applications: [InstalledWindowsApplication] = []
+        for manifestURL in manifestURLs {
+            do {
+                let text = try String(contentsOf: manifestURL, encoding: .utf8)
+                let document = try parser.parse(text)
+                guard let appState = document["AppState"],
+                      let appID = appState["appid"]?.stringValue,
+                      !Self.nonUserFacingAppIDs.contains(appID),
+                      let name = appState["name"]?.stringValue,
+                      let installDirectory = appState["installdir"]?.stringValue else {
+                    continue
+                }
+
+                let installDirectoryURL = steamAppsURL
+                    .appending(path: "common", directoryHint: .isDirectory)
+                    .appending(path: installDirectory, directoryHint: .isDirectory)
+                let stateFlags = UInt64(
+                    appState["StateFlags"]?.stringValue ?? ""
+                ) ?? 0
+                let state = installState(
+                    stateFlags: stateFlags,
+                    installDirectoryURL: installDirectoryURL
+                )
+                let size = Int64(appState["SizeOnDisk"]?.stringValue ?? "")
+
+                applications.append(InstalledWindowsApplication(
+                    id: "steam-\(appID)",
+                    name: name,
+                    source: .steam,
+                    sourceIdentifier: appID,
+                    installState: state,
+                    installDirectoryURL: installDirectoryURL,
+                    launcherURL: launcherURL,
+                    launchArguments: ["-applaunch", appID],
+                    sizeOnDisk: size
+                ))
+            } catch {
+                // Steam updates manifests independently. A partially written or
+                // damaged record must not suppress other installed applications.
+                continue
             }
-
-            let installDirectoryURL = steamAppsURL
-                .appending(path: "common", directoryHint: .isDirectory)
-                .appending(path: installDirectory, directoryHint: .isDirectory)
-            let stateFlags = UInt64(
-                appState["StateFlags"]?.stringValue ?? ""
-            ) ?? 0
-            let state = installState(
-                stateFlags: stateFlags,
-                installDirectoryURL: installDirectoryURL
-            )
-            let size = Int64(appState["SizeOnDisk"]?.stringValue ?? "")
-
-            return InstalledWindowsApplication(
-                id: "steam-\(appID)",
-                name: name,
-                source: .steam,
-                sourceIdentifier: appID,
-                installState: state,
-                installDirectoryURL: installDirectoryURL,
-                launcherURL: launcherURL,
-                launchArguments: ["-applaunch", appID],
-                sizeOnDisk: size
-            )
         }
+        return applications
     }
 
     private func installState(
