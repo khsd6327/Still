@@ -6,7 +6,7 @@ runtime dependencies, and application-specific requirements.
 
 ## Configuration model
 
-Each bottle stores its engine and compatibility configuration independently.
+Each Environment stores its engine and compatibility configuration independently.
 Supported settings include:
 
 1. Wine engine and version.
@@ -27,7 +27,7 @@ Downloads are verified before extraction. Components that require separate
 license acceptance are not installed without confirmation.
 
 A graphics backend is considered active only when its required files and DLL
-overrides are present in the selected bottle.
+overrides are present in the selected Environment.
 
 ## Application profiles
 
@@ -46,4 +46,4 @@ packages. Users can inspect and override these settings.
 
 Still reads installed game metadata from Steam library manifests. Steam helper
 executables are excluded from the application library, and each Steam install
-remains isolated inside its bottle.
+remains isolated inside its Environment.

@@ -5,27 +5,47 @@
 Still is a native macOS application for organizing and running Windows apps
 and games with interchangeable Wine-compatible engines.
 
-Applications, bottles, engines, graphics backends, and processes are modeled
-separately. This keeps the library independent from any single launcher or
-compatibility engine.
+Applications, Environments, engines, graphics backends, and processes are
+modeled separately. This keeps the Library independent from any single
+launcher or compatibility engine.
 
 ## Status
 
-Still `0.1.0-alpha.1` is an early preview intended for evaluation and
-development. Application compatibility varies by engine, macOS version, and
-graphics backend. Still uses Alpha, Beta, and Stable release channels. Current
+Still is pre-release software under active development. Application
+compatibility varies by engine, macOS version, and graphics backend. Release
 builds are ad hoc signed and are not notarized.
+
+## Preview
+
+### Native macOS library
+
+![Still's application library on macOS](Documentation/Assets/still-library.jpg)
+
+Still keeps the ordinary Library, installation, activity, and Environment
+workflow separate from advanced engine controls.
+
+### Steam-installed Windows title on macOS
+
+![A Steam-installed Windows game running on macOS](Documentation/Assets/steam-game-on-macos.png)
+
+This capture shows a Steam-installed Windows title reaching its rendered menu
+through a Wine and DXMT engine on macOS. It does not imply general compatibility
+or that the Steam client UI limitation described in the compatibility notes is
+resolved.
 
 ## Features
 
-- Create and manage isolated Wine bottles.
+- Create, import, duplicate, back up, restore, and safely delete isolated Wine
+  Environments.
 - Install and switch versioned Wine-compatible engines.
-- Configure graphics and synchronization options per bottle.
-- Discover installed Windows applications and pin additional executables.
-- Install Steam from Valve and import its installed game library.
-- View and stop Wine processes by application or bottle.
-- Keep launch logs for troubleshooting.
-- Use the native macOS interface or command-line diagnostics.
+- Apply compatibility Profiles and validated graphics or synchronization
+  settings per application or Environment.
+- Discover installed Windows applications while filtering helper executables.
+- Use the Steam Preview Profile with a local installer selected by the user,
+  then discover installed games as ordinary Library applications.
+- Stop one or all sessions normally or forcefully with explicit scope.
+- Rotate local launch logs and preview a redacted Support Bundle before export.
+- Keep technical controls and raw diagnostics behind Developer Mode.
 
 ## Requirements
 
@@ -55,14 +75,10 @@ xcodegen generate
 open Still.xcodeproj
 ```
 
-Run the package tests and diagnostics:
+Run the tests:
 
 ```sh
-swift build
-swift test
-swift run still-cli info
-swift run still-cli engines
-swift run still-cli scan-apps
+xcodebuild -project Still.xcodeproj -scheme Still test
 ```
 
 Build the Debug application and update `/Applications/Still.app`:
@@ -82,7 +98,7 @@ must be reported privately as described in [Security](SECURITY.md).
 
 ```text
 Sources/
-  StillCore/       Models, persistence, engines, scanning, and processes
+  StillCore/       Models, persistence, compatibility, recovery, and processes
   StillDesktop/    Native macOS interface
   StillCLI/        Command-line operations
   StillChecks/     Runtime diagnostics
