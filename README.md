@@ -24,14 +24,13 @@ backend. Release builds are ad hoc signed and are not notarized.
 Still keeps the ordinary Library, installation, activity, and Environment
 workflow separate from advanced engine controls.
 
-### Steam-installed Windows title on macOS
+### Steam client UI on macOS
 
-![A Steam-installed Windows game running on macOS](Documentation/Assets/steam-game-on-macos.png)
+![Still and the Windows Steam client running on macOS](Documentation/Assets/steam-client-on-macos.png)
 
-This capture shows a Steam-installed Windows title reaching its rendered menu
-through a Wine and DXMT engine on macOS. It does not imply general compatibility
-or that the Steam client UI limitation described in the compatibility notes is
-resolved.
+This capture shows Still beside a freshly initialized Windows Steam client.
+The Steam sign-in interface is rendered through the tested Wine and DXMT path
+on macOS.
 
 ## Features
 

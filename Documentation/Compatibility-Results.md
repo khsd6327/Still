@@ -11,6 +11,7 @@ Wine Metal bridge without library injection.
 
 | Application | Verified boundary | Result |
 | --- | --- | --- |
+| Steam client | Rendered the sign-in interface through the Raw ANGLE Wine patch and DXMT | Passed UI rendering check |
 | Supermarket Chaos | Loaded beyond the menus into the rendered 3D store scene and tutorial overlay | Passed rendering check |
 | Cash Cleaner Simulator | Loaded an existing save into the rendered first-person workplace; movement produced a new frame | Passed rendering check |
 
@@ -18,8 +19,8 @@ These results do not validate sustained play, performance, audio, controllers,
 save integrity, networking, multiplayer, anti-cheat, full-screen transitions,
 sleep and resume, or clean termination.
 
-## Known limitation
+## Engine availability
 
-Steam currently creates a macOS window but does not produce usable interface
-content with the tested open Wine and DXMT paths. This remains unresolved and
-is a known alpha limitation, not a validated application result.
+The Steam UI result requires the tested patched Wine and DXMT engine. The
+normal engine catalog does not install that engine yet, so the result is not a
+general guarantee for catalog engines or other Steam client builds.
