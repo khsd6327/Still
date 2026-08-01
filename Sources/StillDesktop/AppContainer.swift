@@ -43,7 +43,7 @@ struct AppContainer: View {
             forceConfirmationTitle,
             isPresented: Binding(
                 get: { model.pendingForceTermination != nil },
-                set: { if !$0 { model.pendingForceTermination = nil } }
+                set: { _ in }
             ),
             titleVisibility: .visible
         ) {
