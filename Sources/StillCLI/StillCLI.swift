@@ -16,7 +16,7 @@ struct StillCLI {
         let arguments = Array(CommandLine.arguments.dropFirst())
         let command = arguments.first ?? "help"
         let rootURL = rootURL(from: arguments)
-        let store = JSONBottleStore(rootURL: rootURL)
+        let store = JSONStillStore(rootURL: rootURL)
         let frozenLegacyMutations: Set<String> = [
             "create", "setup-steam", "pin-app", "unpin-app", "set-engine"
         ]
@@ -29,20 +29,19 @@ struct StillCLI {
             print("\(ProductIdentity.name) schema \(ProductIdentity.schemaVersion)")
             print("Store: \(rootURL.path)")
         case "list":
-            let bottles = try await store.bottles()
-            if bottles.isEmpty {
-                print("No bottles.")
+            let environments = try await store.environments()
+            if environments.isEmpty {
+                print("No Environments.")
             } else {
-                for bottle in bottles {
-                    print("\(bottle.id.uuidString)\t\(bottle.name)\t\(bottle.graphicsBackend.rawValue)")
+                for environment in environments {
+                    print(
+                        "\(environment.id.uuidString)\t\(environment.name)"
+                            + "\t\(environment.graphicsBackend.rawValue)"
+                    )
                 }
             }
-        case "create":
-            guard arguments.count >= 2 else {
-                throw CLIError.missingBottleName
-            }
-            let bottle = try await store.create(name: arguments[1])
-            print("Created \(bottle.name) at \(bottle.prefixURL.path)")
+        case "create", "setup-steam", "pin-app", "unpin-app", "set-engine":
+            throw CLIError.legacyMutationFrozen(command)
         case "engines":
             let installer = EngineInstaller(rootURL: engineRootURL(from: arguments))
             let installedIDs = Set(
@@ -83,116 +82,39 @@ struct StillCLI {
             )
             print("Installed \(descriptor.displayName)")
             print("Wine: \(descriptor.wineBinaryURL.path)")
-        case "setup-steam":
-            guard arguments.count >= 2, !arguments[1].hasPrefix("--") else {
-                throw CLIError.missingLocalInstaller
-            }
-            let bootstrapper = SteamBootstrapper(
-                bottleStore: store,
-                engineInstaller: EngineInstaller(
-                    rootURL: engineRootURL(from: arguments)
-                )
-            )
-            let result = try await bootstrapper.bootstrap(
-                localInstallerURL: URL(filePath: arguments[1])
-            )
-            print("Steam bottle: \(result.bottle.prefixURL.path)")
-            if let executableURL = result.steamExecutableURL {
-                print("Steam is installed: \(executableURL.path)")
-            } else if let session = result.installerSession {
-                print("Steam installer started (PID \(session.processIdentifier)).")
-                print("Log: \(session.logURL?.path ?? "unavailable")")
-            }
         case "scan-apps":
-            let bottles = try await store.bottles()
-            let selected: [Bottle]
+            let environments = try await store.environments()
+            let selected: [WindowsEnvironment]
             if arguments.count >= 2, !arguments[1].hasPrefix("--") {
-                guard let bottleID = UUID(uuidString: arguments[1]),
-                      let bottle = bottles.first(where: { $0.id == bottleID }) else {
-                    throw CLIError.bottleNotFound(arguments[1])
+                guard let environmentID = UUID(uuidString: arguments[1]),
+                      let environment = environments.first(
+                        where: { $0.id == environmentID }
+                      ) else {
+                    throw CLIError.environmentNotFound(arguments[1])
                 }
-                selected = [bottle]
+                selected = [environment]
             } else {
-                selected = bottles
+                selected = environments
             }
-            let scanner = ApplicationLibraryScanner()
-            let pinStore = JSONApplicationPinStore(rootURL: rootURL)
-            for bottle in selected {
-                var applications = Dictionary(
-                    uniqueKeysWithValues: try scanner
-                        .scan(bottle: bottle)
-                        .map { ($0.id, $0) }
-                )
-                for application in try await pinStore.applications(
-                    bottleID: bottle.id
-                ) {
-                    applications[application.id] = application
-                }
-                for application in applications.values.sorted(by: {
-                    $0.name.localizedStandardCompare($1.name)
-                        == .orderedAscending
-                }) {
+            let coordinator = ApplicationDiscoveryCoordinator()
+            for environment in selected {
+                let result = coordinator.discover(in: bottle(from: environment))
+                for candidate in result.accepted + result.requiresConfirmation {
+                    let application = candidate.application
+                    let disposition = candidate.requiresConfirmation ? "review" : "accepted"
                     print(
-                        "\(bottle.name)\t\(application.sourceIdentifier ?? "-")"
+                        "\(environment.name)\t\(application.sourceIdentifier ?? "-")"
                             + "\t\(application.installState.rawValue)"
-                            + "\t\(application.name)"
+                            + "\t\(disposition)\t\(application.name)"
+                    )
+                }
+                for providerID in result.providerFailures.keys.sorted() {
+                    guard let failure = result.providerFailures[providerID] else { continue }
+                    FileHandle.standardError.write(
+                        Data("warning: \(environment.name) \(providerID): \(failure)\n".utf8)
                     )
                 }
             }
-        case "pin-app":
-            guard arguments.count >= 3 else {
-                throw CLIError.missingPinArguments
-            }
-            guard let bottleID = UUID(uuidString: arguments[1]),
-                  let bottle = try await store.bottle(id: bottleID) else {
-                throw CLIError.bottleNotFound(arguments[1])
-            }
-            let executableURL = URL(filePath: arguments[2])
-            let name = arguments.indices.contains(3)
-                && !arguments[3].hasPrefix("--")
-                ? arguments[3]
-                : nil
-            let application = try await JSONApplicationPinStore(
-                rootURL: rootURL
-            ).pin(
-                executableURL: executableURL,
-                name: name,
-                in: bottle
-            )
-            print("Pinned \(application.name)")
-            print("ID: \(application.id)")
-        case "unpin-app":
-            guard arguments.count >= 3,
-                  let bottleID = UUID(uuidString: arguments[1]) else {
-                throw CLIError.missingUnpinArguments
-            }
-            try await JSONApplicationPinStore(rootURL: rootURL).remove(
-                applicationID: arguments[2],
-                bottleID: bottleID
-            )
-            print("Removed pin \(arguments[2])")
-        case "set-engine":
-            guard arguments.count >= 3 else {
-                throw CLIError.missingSetEngineArguments
-            }
-            guard let bottleID = UUID(uuidString: arguments[1]),
-                  var bottle = try await store.bottle(id: bottleID) else {
-                throw CLIError.bottleNotFound(arguments[1])
-            }
-            let engineID = arguments[2]
-            let engineInstaller = EngineInstaller(
-                rootURL: engineRootURL(from: arguments)
-            )
-            let installedIDs = Set(
-                await engineInstaller.installedDescriptors().map(\.id)
-            )
-            guard installedIDs.contains(engineID) else {
-                throw StillCoreError.engineNotFound(engineID)
-            }
-            bottle.engineID = engineID
-            bottle.updatedAt = .now
-            try await store.save(bottle)
-            print("Changed \(bottle.name) engine to \(engineID)")
         case "help", "--help", "-h":
             printHelp()
         default:
@@ -211,9 +133,27 @@ struct StillCLI {
     private static func rootURL(from arguments: [String]) -> URL {
         guard let index = arguments.firstIndex(of: "--root"),
               arguments.indices.contains(index + 1) else {
-            return JSONBottleStore.defaultRootURL()
+            return JSONStillStore.defaultRootURL()
         }
         return URL(filePath: arguments[index + 1], directoryHint: .isDirectory)
+    }
+
+    private static func bottle(from environment: WindowsEnvironment) -> Bottle {
+        Bottle(
+            id: environment.id,
+            name: environment.name,
+            prefixURL: environment.prefixURL,
+            engineID: environment.pinnedEngineBuildID,
+            provisionedEngineID: environment.provisionedEngineBuildID,
+            recipeID: environment.profileID,
+            graphicsBackend: environment.graphicsBackend,
+            windowsVersion: environment.windowsVersion,
+            enhancedSync: environment.enhancedSync,
+            metalHUDEnabled: environment.metalHUDEnabled,
+            metalTraceEnabled: environment.metalTraceEnabled,
+            createdAt: environment.createdAt,
+            updatedAt: environment.updatedAt
+        )
     }
 
     private static func printHelp() {
@@ -222,7 +162,7 @@ struct StillCLI {
             Usage: still-cli <command> [arguments] [--root <path>]
 
               info                 Show build and storage information.
-              list                 List bottles.
+              list                 List Environments from the primary store.
               create <name>        Temporarily unavailable during store migration.
               engines              List public and installed engines.
               install-engine <id>  Download, verify, and install an engine.
@@ -230,17 +170,18 @@ struct StillCLI {
                                     Verify and install a local engine archive.
               setup-steam <local-exe>
                                     Temporarily unavailable during store migration.
-              scan-apps [bottle-id] Scan Windows apps in one or all bottles.
-              pin-app <bottle-id> <exe-path> [name]
+              scan-apps [environment-id]
+                                    Scan Windows apps without modifying the store.
+              pin-app <environment-id> <exe-path> [name]
                                     Temporarily unavailable during store migration.
-              unpin-app <bottle-id> <application-id>
+              unpin-app <environment-id> <application-id>
                                     Temporarily unavailable during store migration.
-              set-engine <bottle-id> <engine-id>
+              set-engine <environment-id> <engine-id>
                                     Temporarily unavailable during store migration.
               help                 Show this help.
 
             Options:
-              --root <path>         Override bottle storage.
+              --root <path>         Override Still storage.
               --engine-root <path>  Override engine storage.
               --accept-license      Confirm an external engine license.
             """
@@ -257,7 +198,7 @@ private enum CLIError: LocalizedError {
     case missingUnpinArguments
     case missingSetEngineArguments
     case legacyMutationFrozen(String)
-    case bottleNotFound(String)
+    case environmentNotFound(String)
     case unknownCommand(String)
 
     var errorDescription: String? {
@@ -278,8 +219,8 @@ private enum CLIError: LocalizedError {
             "The set-engine command requires a bottle ID and engine ID."
         case .legacyMutationFrozen(let command):
             "The '\(command)' command is temporarily read-only while Still migrates the CLI to its primary store. No data was changed."
-        case .bottleNotFound(let value):
-            "Bottle '\(value)' was not found."
+        case .environmentNotFound(let value):
+            "Environment '\(value)' was not found."
         case .unknownCommand(let command):
             "Unknown command '\(command)'."
         }

@@ -11,7 +11,7 @@ public actor JSONStillStore {
     private let migrator: StillStoreMigrator
 
     public init(
-        rootURL: URL = JSONBottleStore.defaultRootURL(),
+        rootURL: URL = JSONStillStore.defaultRootURL(),
         fileManager: FileManager = .default,
         migrator: StillStoreMigrator = StillStoreMigrator()
     ) {
@@ -24,6 +24,16 @@ public actor JSONStillStore {
             .appending(path: "schema-1", directoryHint: .isDirectory)
         self.fileManager = fileManager
         self.migrator = migrator
+    }
+
+    public static func defaultRootURL() -> URL {
+        FileManager.default.urls(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask
+        )[0].appending(
+            path: ProductIdentity.bundleIdentifier,
+            directoryHint: .isDirectory
+        )
     }
 
     public func load() throws -> StillStoreDocument {
