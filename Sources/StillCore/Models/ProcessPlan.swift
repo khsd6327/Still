@@ -6,6 +6,8 @@ public struct ProcessTerminationPlan: Sendable {
     public let gracefulArguments: [String]
     public let forceExecutableURL: URL
     public let forceArguments: [String]
+    public let monitorExecutableURL: URL?
+    public let monitorArguments: [String]
     public let environment: [String: String]
     public let workingDirectoryURL: URL?
     public let acceptedExitCodes: Set<Int32>
@@ -16,6 +18,8 @@ public struct ProcessTerminationPlan: Sendable {
         gracefulArguments: [String],
         forceExecutableURL: URL,
         forceArguments: [String],
+        monitorExecutableURL: URL? = nil,
+        monitorArguments: [String] = [],
         environment: [String: String],
         workingDirectoryURL: URL? = nil,
         acceptedExitCodes: Set<Int32> = [0, 1]
@@ -25,6 +29,8 @@ public struct ProcessTerminationPlan: Sendable {
         self.gracefulArguments = gracefulArguments
         self.forceExecutableURL = forceExecutableURL
         self.forceArguments = forceArguments
+        self.monitorExecutableURL = monitorExecutableURL
+        self.monitorArguments = monitorArguments
         self.environment = environment
         self.workingDirectoryURL = workingDirectoryURL
         self.acceptedExitCodes = acceptedExitCodes

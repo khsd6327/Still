@@ -35,7 +35,7 @@ final class WineProcessTests: XCTestCase {
         XCTAssertEqual(plan.sessionID, sessionID)
         XCTAssertEqual(
             plan.arguments,
-            ["start", "/unix", "/wait", "/tmp/My Game/game.exe", "--safe mode"]
+            ["start", "/unix", "/tmp/My Game/game.exe", "--safe mode"]
         )
         XCTAssertEqual(plan.environment["WINEPREFIX"], "/tmp/Still Bottle")
         XCTAssertEqual(plan.environment["STILL_TEST"], "1")
@@ -44,6 +44,11 @@ final class WineProcessTests: XCTestCase {
         XCTAssertEqual(plan.terminationPlan?.scopeIdentifier, "/tmp/Still Bottle")
         XCTAssertEqual(plan.terminationPlan?.gracefulArguments, ["wineboot", "--end-session"])
         XCTAssertEqual(plan.terminationPlan?.forceArguments, ["-k", "-w"])
+        XCTAssertEqual(
+            plan.terminationPlan?.monitorExecutableURL,
+            URL(filePath: "/opt/wine/bin/wineserver")
+        )
+        XCTAssertEqual(plan.terminationPlan?.monitorArguments, ["-w"])
     }
 
     func testNormalAndForceStopPlansAreDistinct() {

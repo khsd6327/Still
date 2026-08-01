@@ -20,7 +20,6 @@ public enum WineCommandBuilder {
             arguments: [
                 "start",
                 "/unix",
-                "/wait",
                 request.executableURL.path
             ] + request.arguments,
             environment: environment,
@@ -35,6 +34,10 @@ public enum WineCommandBuilder {
                     .deletingLastPathComponent()
                     .appending(path: "wineserver"),
                 forceArguments: ["-k", "-w"],
+                monitorExecutableURL: engine.wineBinaryURL
+                    .deletingLastPathComponent()
+                    .appending(path: "wineserver"),
+                monitorArguments: ["-w"],
                 environment: environment,
                 workingDirectoryURL: request.bottle.prefixURL
             )

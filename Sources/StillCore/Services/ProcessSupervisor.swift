@@ -3,7 +3,7 @@ import Foundation
 
 public actor ProcessSupervisor {
     private struct ManagedProcess {
-        let process: Process
+        var process: Process
         let logHandle: FileHandle
         let terminationPlan: ProcessTerminationPlan?
         var session: LaunchSession
@@ -32,6 +32,23 @@ public actor ProcessSupervisor {
         try managed.session.transition(to: .launching)
         do {
             try managed.process.run()
+            if let terminationPlan = managed.terminationPlan,
+               let monitorExecutableURL = terminationPlan.monitorExecutableURL {
+                managed.process.waitUntilExit()
+                guard terminationPlan.acceptedExitCodes.contains(
+                    managed.process.terminationStatus
+                ) else {
+                    throw StillCoreError.processFailed(managed.process.terminationStatus)
+                }
+                managed.process = makeProcess(
+                    executableURL: monitorExecutableURL,
+                    arguments: terminationPlan.monitorArguments,
+                    environment: terminationPlan.environment,
+                    workingDirectoryURL: terminationPlan.workingDirectoryURL,
+                    logHandle: managed.logHandle
+                )
+                try managed.process.run()
+            }
             try managed.session.transition(
                 to: .running,
                 rootProcessIdentifier: managed.process.processIdentifier
@@ -161,13 +178,13 @@ public actor ProcessSupervisor {
         }
 
         let logHandle = try FileHandle(forWritingTo: plan.logURL)
-        let process = Process()
-        process.executableURL = plan.executableURL
-        process.arguments = plan.arguments
-        process.environment = plan.environment
-        process.currentDirectoryURL = plan.workingDirectoryURL
-        process.standardOutput = logHandle
-        process.standardError = logHandle
+        let process = makeProcess(
+            executableURL: plan.executableURL,
+            arguments: plan.arguments,
+            environment: plan.environment,
+            workingDirectoryURL: plan.workingDirectoryURL,
+            logHandle: logHandle
+        )
 
         return ManagedProcess(
             process: process,
@@ -180,6 +197,23 @@ public actor ProcessSupervisor {
                 logURL: plan.logURL
             )
         )
+    }
+
+    private func makeProcess(
+        executableURL: URL,
+        arguments: [String],
+        environment: [String: String],
+        workingDirectoryURL: URL?,
+        logHandle: FileHandle
+    ) -> Process {
+        let process = Process()
+        process.executableURL = executableURL
+        process.arguments = arguments
+        process.environment = environment
+        process.currentDirectoryURL = workingDirectoryURL
+        process.standardOutput = logHandle
+        process.standardError = logHandle
+        return process
     }
 
     private func runTerminationPlan(
