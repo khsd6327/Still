@@ -34,7 +34,7 @@ public enum WineCommandBuilder {
                 forceExecutableURL: engine.wineBinaryURL
                     .deletingLastPathComponent()
                     .appending(path: "wineserver"),
-                forceArguments: ["-k"],
+                forceArguments: ["-k", "-w"],
                 environment: environment,
                 workingDirectoryURL: request.bottle.prefixURL
             )
@@ -84,7 +84,7 @@ public enum WineCommandBuilder {
             executableURL: engine.wineBinaryURL
                 .deletingLastPathComponent()
                 .appending(path: "wineserver"),
-            arguments: ["-k"],
+            arguments: ["-k", "-w"],
             environment: wineEnvironment(bottle: bottle, engine: engine),
             workingDirectoryURL: bottle.prefixURL,
             logURL: logURL

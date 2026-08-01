@@ -43,7 +43,7 @@ final class WineProcessTests: XCTestCase {
         XCTAssertNil(plan.environment["NODE_REPL_TRUSTED_BROWSER_CLIENT_SHA256S"])
         XCTAssertEqual(plan.terminationPlan?.scopeIdentifier, "/tmp/Still Bottle")
         XCTAssertEqual(plan.terminationPlan?.gracefulArguments, ["wineboot", "--end-session"])
-        XCTAssertEqual(plan.terminationPlan?.forceArguments, ["-k"])
+        XCTAssertEqual(plan.terminationPlan?.forceArguments, ["-k", "-w"])
     }
 
     func testNormalAndForceStopPlansAreDistinct() {
@@ -76,7 +76,7 @@ final class WineProcessTests: XCTestCase {
             logURL: URL(filePath: "/tmp/force-stop.log")
         )
         XCTAssertEqual(forcePlan.executableURL, URL(filePath: "/opt/wine/bin/wineserver"))
-        XCTAssertEqual(forcePlan.arguments, ["-k"])
+        XCTAssertEqual(forcePlan.arguments, ["-k", "-w"])
     }
 
     func testCompatibilityEnvironmentUsesMSyncAndMetalDiagnostics() {
