@@ -317,6 +317,45 @@ final class CompatibilityFoundationTests: XCTestCase {
         XCTAssertTrue(builds.contains(historical))
     }
 
+    func testInstalledEngineBuildSynchronizationRejectsArtifactIdentityChange() async throws {
+        let rootURL = FileManager.default.temporaryDirectory
+            .appending(path: "StillEngineIdentityTests")
+            .appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: rootURL) }
+        let recorded = EngineBuild(
+            id: "local",
+            family: .wineStaging,
+            displayName: "Local",
+            version: "1",
+            installURL: rootURL.appending(path: "Engine"),
+            capabilities: [.win64, .dxmt],
+            artifactManifestSHA256: String(repeating: "a", count: 64)
+        )
+        let replaced = EngineBuild(
+            id: "local",
+            family: .wineStaging,
+            displayName: "Local",
+            version: "1",
+            installURL: rootURL.appending(path: "Engine"),
+            capabilities: [.win64, .dxmt],
+            artifactManifestSHA256: String(repeating: "b", count: 64)
+        )
+        let store = JSONStillStore(rootURL: rootURL)
+        try await store.save(StillStoreDocument(engineBuilds: [recorded]))
+
+        do {
+            try await store.synchronizeInstalledEngineBuilds([replaced])
+            XCTFail("Expected immutable engine identity failure")
+        } catch let error as StillCoreError {
+            guard case .verificationFailed = error else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+        }
+
+        let reloaded = try await store.load()
+        XCTAssertEqual(reloaded.engineBuilds, [recorded])
+    }
+
     func testManagedRuntimeReplacementRemapsEntriesAndRetainsSource() async throws {
         let rootURL = FileManager.default.temporaryDirectory
             .appending(path: "StillRuntimeReplacementTests")

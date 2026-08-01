@@ -172,7 +172,22 @@ public actor JSONStillStore {
         var changed = false
         for build in builds {
             if let index = document.engineBuilds.firstIndex(where: { $0.id == build.id }) {
-                guard document.engineBuilds[index] != build else { continue }
+                let stored = document.engineBuilds[index]
+                guard stored != build else { continue }
+                if stored.sourceArchiveSHA256 != nil
+                    || stored.artifactManifestSHA256 != nil {
+                    guard stored.family == build.family,
+                          stored.version == build.version,
+                          stored.installURL == build.installURL,
+                          stored.capabilities == build.capabilities,
+                          stored.sourceArchiveSHA256 == build.sourceArchiveSHA256,
+                          stored.artifactManifestSHA256
+                            == build.artifactManifestSHA256 else {
+                        throw StillCoreError.verificationFailed(
+                            "Installed engine '\(build.id)' no longer matches its recorded build."
+                        )
+                    }
+                }
                 document.engineBuilds[index] = build
             } else {
                 document.engineBuilds.append(build)

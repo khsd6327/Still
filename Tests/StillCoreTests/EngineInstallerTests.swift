@@ -64,6 +64,7 @@ final class EngineInstallerTests: XCTestCase {
         )
 
         XCTAssertEqual(descriptor.id, manifest.id)
+        XCTAssertEqual(descriptor.sourceArchiveSHA256, manifest.sha256)
         XCTAssertTrue(
             fileManager.isExecutableFile(atPath: descriptor.wineBinaryURL.path)
         )
@@ -111,6 +112,16 @@ final class EngineInstallerTests: XCTestCase {
             [.posixPermissions: 0o755],
             ofItemAtPath: binaryURL.path
         )
+        let binaryRelativePath = "Wine Staging.app/Contents/Resources/wine/bin/wine"
+        let artifact = InstalledEngineArtifact(
+            relativePath: binaryRelativePath,
+            sha256: try SHA256Verifier.digest(of: binaryURL),
+            byteCount: Int64(
+                try fileManager.attributesOfItem(atPath: binaryURL.path)[.size]
+                    as? Int ?? 0
+            ),
+            isExecutable: true
+        )
         let manifest = InstalledEngineBuildManifest(
             id: "still-dxmt",
             family: .wineStaging,
@@ -118,22 +129,69 @@ final class EngineInstallerTests: XCTestCase {
             version: "11.14",
             archiveRoot: "Wine Staging.app",
             wineBinaryRelativePath: "Contents/Resources/wine/bin/wine",
-            capabilities: [.win64, .esync, .dxmt]
+            capabilities: [.win64, .esync],
+            artifacts: [artifact]
         )
-        try JSONEncoder().encode(manifest).write(
-            to: versionURL.appending(path: InstalledEngineBuildManifest.fileName)
+        let manifestURL = versionURL.appending(
+            path: InstalledEngineBuildManifest.fileName
         )
+        try JSONEncoder().encode(manifest).write(to: manifestURL)
 
         let descriptors = await EngineInstaller(rootURL: rootURL).installedDescriptors()
 
         XCTAssertEqual(descriptors.count, 1)
         XCTAssertEqual(descriptors[0].id, "still-dxmt")
         XCTAssertEqual(descriptors[0].family, .wineStaging)
-        XCTAssertTrue(descriptors[0].capabilities.contains(.dxmt))
+        XCTAssertEqual(
+            descriptors[0].artifactManifestSHA256,
+            try SHA256Verifier.digest(of: manifestURL)
+        )
         XCTAssertEqual(
             descriptors[0].wineBinaryURL.resolvingSymlinksInPath(),
             binaryURL.resolvingSymlinksInPath()
         )
+    }
+
+    func testRejectsLocallyBuiltEngineWhenArtifactIsModified() async throws {
+        let fixture = try makeLocalEngineFixture(includesArtifacts: true)
+        defer { try? FileManager.default.removeItem(at: fixture.rootURL) }
+
+        try Data("modified".utf8).write(to: fixture.binaryURL)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o755],
+            ofItemAtPath: fixture.binaryURL.path
+        )
+
+        let descriptors = await EngineInstaller(rootURL: fixture.rootURL)
+            .installedDescriptors()
+
+        XCTAssertTrue(descriptors.isEmpty)
+    }
+
+    func testDiscoversLegacyLocalManifestWithoutArtifactIdentity() async throws {
+        let fixture = try makeLocalEngineFixture(includesArtifacts: false)
+        defer { try? FileManager.default.removeItem(at: fixture.rootURL) }
+
+        let descriptors = await EngineInstaller(rootURL: fixture.rootURL)
+            .installedDescriptors()
+
+        XCTAssertEqual(descriptors.count, 1)
+        XCTAssertNil(descriptors[0].artifactManifestSHA256)
+    }
+
+    func testRejectsLocallyBuiltEngineWhenExecutableAttributeChanges() async throws {
+        let fixture = try makeLocalEngineFixture(includesArtifacts: true)
+        defer { try? FileManager.default.removeItem(at: fixture.rootURL) }
+
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o644],
+            ofItemAtPath: fixture.binaryURL.path
+        )
+
+        let descriptors = await EngineInstaller(rootURL: fixture.rootURL)
+            .installedDescriptors()
+
+        XCTAssertTrue(descriptors.isEmpty)
     }
 
     func testGPTKRequiresExternalLicenseAcceptance() async {
@@ -168,5 +226,58 @@ final class EngineInstallerTests: XCTestCase {
         try process.run()
         process.waitUntilExit()
         XCTAssertEqual(process.terminationStatus, 0)
+    }
+
+    private func makeLocalEngineFixture(
+        includesArtifacts: Bool
+    ) throws -> (rootURL: URL, binaryURL: URL) {
+        let fileManager = FileManager.default
+        let rootURL = fileManager.temporaryDirectory
+            .appending(path: "StillLocalEngineFixtureTests")
+            .appending(path: UUID().uuidString)
+        let versionURL = rootURL
+            .appending(path: "still-local", directoryHint: .isDirectory)
+            .appending(path: "1", directoryHint: .isDirectory)
+        let relativePath = "Wine Test.app/Contents/Resources/wine/bin/wine"
+        let binaryURL = versionURL.appending(path: relativePath)
+        try fileManager.createDirectory(
+            at: binaryURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try Data("#!/bin/sh\nexit 0\n".utf8).write(to: binaryURL)
+        try fileManager.setAttributes(
+            [.posixPermissions: 0o755],
+            ofItemAtPath: binaryURL.path
+        )
+        let artifacts: [InstalledEngineArtifact]
+        if includesArtifacts {
+            artifacts = [
+                InstalledEngineArtifact(
+                    relativePath: relativePath,
+                    sha256: try SHA256Verifier.digest(of: binaryURL),
+                    byteCount: Int64(
+                        try fileManager.attributesOfItem(atPath: binaryURL.path)[.size]
+                            as? Int ?? 0
+                    ),
+                    isExecutable: true
+                )
+            ]
+        } else {
+            artifacts = []
+        }
+        let manifest = InstalledEngineBuildManifest(
+            id: "still-local",
+            family: .wineStable,
+            displayName: "Still Local",
+            version: "1",
+            archiveRoot: "Wine Test.app",
+            wineBinaryRelativePath: "Contents/Resources/wine/bin/wine",
+            capabilities: [.win64],
+            artifacts: artifacts
+        )
+        try JSONEncoder().encode(manifest).write(
+            to: versionURL.appending(path: InstalledEngineBuildManifest.fileName)
+        )
+        return (rootURL, binaryURL)
     }
 }

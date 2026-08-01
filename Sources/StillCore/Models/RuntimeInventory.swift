@@ -9,6 +9,8 @@ public struct EngineBuild: Codable, Hashable, Identifiable, Sendable {
     public var capabilities: EngineCapabilities
     public var manifestID: String?
     public var requiredLicenseID: String?
+    public var sourceArchiveSHA256: String?
+    public var artifactManifestSHA256: String?
 
     public init(
         id: String,
@@ -18,7 +20,9 @@ public struct EngineBuild: Codable, Hashable, Identifiable, Sendable {
         installURL: URL,
         capabilities: EngineCapabilities,
         manifestID: String? = nil,
-        requiredLicenseID: String? = nil
+        requiredLicenseID: String? = nil,
+        sourceArchiveSHA256: String? = nil,
+        artifactManifestSHA256: String? = nil
     ) {
         self.id = id
         self.family = family
@@ -28,11 +32,14 @@ public struct EngineBuild: Codable, Hashable, Identifiable, Sendable {
         self.capabilities = capabilities
         self.manifestID = manifestID
         self.requiredLicenseID = requiredLicenseID
+        self.sourceArchiveSHA256 = sourceArchiveSHA256
+        self.artifactManifestSHA256 = artifactManifestSHA256
     }
 
     private enum CodingKeys: String, CodingKey {
         case id, family, displayName, version, installURL, capabilities
-        case manifestID, requiredLicenseID
+        case manifestID, requiredLicenseID, sourceArchiveSHA256
+        case artifactManifestSHA256
     }
 
     public init(from decoder: Decoder) throws {
@@ -45,6 +52,14 @@ public struct EngineBuild: Codable, Hashable, Identifiable, Sendable {
         capabilities = try values.decode(EngineCapabilities.self, forKey: .capabilities)
         manifestID = try values.decodeIfPresent(String.self, forKey: .manifestID)
         requiredLicenseID = try values.decodeIfPresent(String.self, forKey: .requiredLicenseID)
+        sourceArchiveSHA256 = try values.decodeIfPresent(
+            String.self,
+            forKey: .sourceArchiveSHA256
+        )
+        artifactManifestSHA256 = try values.decodeIfPresent(
+            String.self,
+            forKey: .artifactManifestSHA256
+        )
     }
 }
 

@@ -44,8 +44,39 @@ case "$capabilities_raw" in
         ;;
 esac
 
-/usr/bin/ruby -rjson -e '
-  target, id, family, display_name, version, archive_root, wine_path, capabilities = ARGV
+/usr/bin/ruby -rjson -rdigest -rpathname -e '
+  target, version_root, id, family, display_name, version, archive_root, wine_path, capabilities = ARGV
+  root = Pathname(version_root).realpath
+  wine_relative_path = File.join(archive_root, wine_path)
+  wine_binary = root.join(wine_relative_path)
+  runtime_root = wine_binary.dirname.dirname
+  bridge_manifest = runtime_root.join("share/still/dxmt-bridge.json")
+  relative_paths = [wine_relative_path]
+
+  if bridge_manifest.file?
+    relative_paths << bridge_manifest.relative_path_from(root).to_s
+    bridge = JSON.parse(bridge_manifest.read)
+    Array(bridge["artifacts"]).each do |artifact|
+      bridge_path = artifact.fetch("relativePath")
+      relative_paths << runtime_root.join(bridge_path).relative_path_from(root).to_s
+    end
+  end
+
+  artifacts = relative_paths.uniq.sort.map do |relative_path|
+    candidate = root.join(relative_path)
+    resolved = candidate.realpath
+    unless resolved.to_s.start_with?(root.to_s + File::SEPARATOR) &&
+           candidate.lstat.file? && !candidate.lstat.symlink?
+      abort("error: unsafe engine artifact: #{relative_path}")
+    end
+    {
+      "relativePath" => relative_path,
+      "sha256" => Digest::SHA256.file(candidate).hexdigest,
+      "byteCount" => candidate.size,
+      "isExecutable" => candidate.executable?
+    }
+  end
+
   document = {
     "contractID" => "app.stillproject.engine-build",
     "schemaVersion" => 1,
@@ -55,9 +86,10 @@ esac
     "version" => version,
     "archiveRoot" => archive_root,
     "wineBinaryRelativePath" => wine_path,
-    "capabilities" => Integer(capabilities, 10)
+    "capabilities" => Integer(capabilities, 10),
+    "artifacts" => artifacts
   }
   File.write(target, JSON.pretty_generate(document) + "\n")
-' "$manifest_target" "$engine_id" "$family" "$display_name" "$version" \
+' "$manifest_target" "$version_root" "$engine_id" "$family" "$display_name" "$version" \
   "$archive_root" "$wine_binary_relative_path" "$capabilities_raw"
 echo "$manifest_target"

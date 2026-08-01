@@ -63,5 +63,7 @@ shim remains a Debug-only, explicitly enabled diagnostic tool.
 ```
 
 Each engine is stored under its manifest identifier and version. Source-built
-engines are discovered from a version-root `still-engine.json` manifest and
-become available for guarded Environment engine selection.
+engines are discovered from a version-root `still-engine.json` manifest. The
+manifest records the Wine executable and direct-bridge artifacts with their
+byte sizes, executable attributes, and SHA-256 digests. Still verifies the
+complete list before making the engine available for Environment selection.

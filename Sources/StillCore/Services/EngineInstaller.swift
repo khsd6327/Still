@@ -126,7 +126,8 @@ public actor EngineInstaller {
             version: manifest.version,
             family: manifest.family,
             wineBinaryURL: wineBinaryURL,
-            capabilities: manifest.capabilities
+            capabilities: manifest.capabilities,
+            sourceArchiveSHA256: manifest.sha256
         )
     }
 
@@ -187,15 +188,62 @@ public actor EngineInstaller {
         let binaryURL = versionDirectory
             .appending(path: manifest.archiveRoot, directoryHint: .isDirectory)
             .appending(path: manifest.wineBinaryRelativePath)
-        guard fileManager.isExecutableFile(atPath: binaryURL.path) else { return nil }
-        return EngineDescriptor(
+        guard fileManager.isExecutableFile(atPath: binaryURL.path),
+              validateArtifacts(
+                manifest.artifacts,
+                versionDirectory: versionDirectory,
+                wineBinaryRelativePath: "\(manifest.archiveRoot)/\(manifest.wineBinaryRelativePath)"
+              ) else { return nil }
+        let descriptor = EngineDescriptor(
             id: manifest.id,
             displayName: manifest.displayName,
             version: manifest.version,
             family: manifest.family,
             wineBinaryURL: binaryURL,
-            capabilities: manifest.capabilities
+            capabilities: manifest.capabilities,
+            artifactManifestSHA256: manifest.artifacts.isEmpty
+                ? nil
+                : try? SHA256Verifier.digest(of: manifestURL)
         )
+        if descriptor.capabilities.contains(.dxmt),
+           !DXMTBridgeValidator().validate(engine: descriptor).isAvailable {
+            return nil
+        }
+        return descriptor
+    }
+
+    private func validateArtifacts(
+        _ artifacts: [InstalledEngineArtifact],
+        versionDirectory: URL,
+        wineBinaryRelativePath: String
+    ) -> Bool {
+        guard !artifacts.isEmpty else { return true }
+        guard Set(artifacts.map(\.relativePath)).count == artifacts.count,
+              artifacts.contains(where: {
+                  $0.relativePath == wineBinaryRelativePath && $0.isExecutable
+              }) else { return false }
+
+        let rootPath = versionDirectory.standardizedFileURL.path
+        for artifact in artifacts {
+            guard isSafeRelativePath(artifact.relativePath),
+                  artifact.sha256.count == 64,
+                  artifact.byteCount >= 0 else { return false }
+            let url = versionDirectory.appending(path: artifact.relativePath)
+            let resolvedPath = url.resolvingSymlinksInPath().standardizedFileURL.path
+            guard resolvedPath.hasPrefix(rootPath + "/"),
+                  let values = try? url.resourceValues(
+                    forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey]
+                  ),
+                  values.isRegularFile == true,
+                  values.isSymbolicLink != true,
+                  Int64(values.fileSize ?? -1) == artifact.byteCount,
+                  fileManager.isExecutableFile(atPath: url.path) == artifact.isExecutable,
+                  (try? SHA256Verifier.verify(
+                    fileURL: url,
+                    expectedDigest: artifact.sha256
+                  )) != nil else { return false }
+        }
+        return true
     }
 
     private func isPlainDirectory(_ url: URL) -> Bool {

@@ -22,6 +22,8 @@ public struct EngineDescriptor: Codable, Hashable, Identifiable, Sendable {
     public let family: EngineFamily?
     public let wineBinaryURL: URL
     public let capabilities: EngineCapabilities
+    public let sourceArchiveSHA256: String?
+    public let artifactManifestSHA256: String?
 
     public init(
         id: String,
@@ -29,7 +31,9 @@ public struct EngineDescriptor: Codable, Hashable, Identifiable, Sendable {
         version: String,
         family: EngineFamily? = nil,
         wineBinaryURL: URL,
-        capabilities: EngineCapabilities
+        capabilities: EngineCapabilities,
+        sourceArchiveSHA256: String? = nil,
+        artifactManifestSHA256: String? = nil
     ) {
         self.id = id
         self.displayName = displayName
@@ -37,5 +41,7 @@ public struct EngineDescriptor: Codable, Hashable, Identifiable, Sendable {
         self.family = family
         self.wineBinaryURL = wineBinaryURL
         self.capabilities = capabilities
+        self.sourceArchiveSHA256 = sourceArchiveSHA256
+        self.artifactManifestSHA256 = artifactManifestSHA256
     }
 }

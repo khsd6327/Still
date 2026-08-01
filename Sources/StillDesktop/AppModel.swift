@@ -952,7 +952,9 @@ final class AppModel: ObservableObject {
             version: engine.version,
             installURL: engine.wineBinaryURL.deletingLastPathComponent(),
             capabilities: engine.capabilities,
-            manifestID: bundledManifest?.id
+            manifestID: bundledManifest?.id,
+            sourceArchiveSHA256: engine.sourceArchiveSHA256,
+            artifactManifestSHA256: engine.artifactManifestSHA256
         )
     }
 
