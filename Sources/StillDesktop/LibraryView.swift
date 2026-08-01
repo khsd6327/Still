@@ -1,3 +1,5 @@
+import AppKit
+import ImageIO
 import StillCore
 import SwiftUI
 
@@ -47,7 +49,8 @@ struct LibraryView: View {
                     } label: {
                         ApplicationCard(
                             application: application,
-                            isSelected: model.selectedApplicationID == application.id
+                            isSelected: model.selectedApplicationID == application.id,
+                            artworkURL: artworkURL(for: application)
                         )
                     }
                     .buttonStyle(.plain)
@@ -80,7 +83,15 @@ struct LibraryView: View {
     private var list: some View {
         Table(model.visibleApplications, selection: $model.selectedApplicationID) {
             TableColumn("Name") { application in
-                Label(application.name, systemImage: icon(for: application))
+                HStack(spacing: 8) {
+                    ApplicationArtwork(
+                        url: artworkURL(for: application),
+                        fallbackSystemImage: icon(for: application),
+                        inset: 2
+                    )
+                    .frame(width: 22, height: 22)
+                    Text(application.name)
+                }
             }
             TableColumn("Type") { application in
                 Text(application.category.rawValue.capitalized)
@@ -129,11 +140,23 @@ struct LibraryView: View {
         let favorite = application.isFavorite ? ", Favorite" : ""
         return "\(selected), \(application.category.rawValue)\(favorite)"
     }
+
+    private func artworkURL(for application: LibraryApplication) -> URL? {
+        guard let entryID = application.launchEntryIDs.first,
+              let entry = model.launchEntries.first(where: { $0.id == entryID }) else {
+            return nil
+        }
+        return ApplicationArtworkResolver.resolve(
+            application: application,
+            launcherURL: entry.executableURL
+        )
+    }
 }
 
 private struct ApplicationCard: View {
     let application: LibraryApplication
     let isSelected: Bool
+    let artworkURL: URL?
     @Environment(\.accessibilityDifferentiateWithoutColor) private var differentiateWithoutColor
     @Environment(\.colorSchemeContrast) private var contrast
 
@@ -142,9 +165,13 @@ private struct ApplicationCard: View {
             ZStack {
                 RoundedRectangle(cornerRadius: 16)
                     .fill(.quaternary)
-                Image(systemName: application.category == .game ? "gamecontroller.fill" : "app.fill")
-                    .font(.system(size: 38))
-                    .foregroundStyle(.secondary)
+                ApplicationArtwork(
+                    url: artworkURL,
+                    fallbackSystemImage: application.category == .game
+                        ? "gamecontroller.fill"
+                        : "app.fill",
+                    inset: application.category == .game ? 0 : 32
+                )
             }
             .aspectRatio(1.4, contentMode: .fit)
             HStack(alignment: .firstTextBaseline) {
@@ -175,5 +202,89 @@ private struct ApplicationCard: View {
         }
         .contentShape(Rectangle())
         .accessibilityHidden(true)
+    }
+}
+
+struct ApplicationArtwork: View {
+    let url: URL?
+    let fallbackSystemImage: String
+    var inset: CGFloat = 0
+
+    var body: some View {
+        Group {
+            if let url, let image = ApplicationArtworkLoader.load(url) {
+                Image(nsImage: image)
+                    .resizable()
+                    .scaledToFit()
+                    .padding(inset)
+            } else {
+                Image(systemName: fallbackSystemImage)
+                    .resizable()
+                    .scaledToFit()
+                    .padding(max(inset, 6))
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+}
+
+enum ApplicationArtworkLoader {
+    static func load(_ url: URL) -> NSImage? {
+        if let image = NSImage(contentsOf: url) { return image }
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else {
+            return nil
+        }
+
+        let bestIndex = (0..<CGImageSourceGetCount(source)).max { left, right in
+            pixelArea(source: source, index: left) < pixelArea(source: source, index: right)
+        } ?? 0
+        guard let image = CGImageSourceCreateImageAtIndex(source, bestIndex, nil) else {
+            return nil
+        }
+        return NSImage(
+            cgImage: image,
+            size: NSSize(width: image.width, height: image.height)
+        )
+    }
+
+    private static func pixelArea(source: CGImageSource, index: Int) -> Int {
+        guard let properties = CGImageSourceCopyPropertiesAtIndex(source, index, nil)
+                as? [CFString: Any],
+              let width = properties[kCGImagePropertyPixelWidth] as? Int,
+              let height = properties[kCGImagePropertyPixelHeight] as? Int else {
+            return 0
+        }
+        return width * height
+    }
+}
+
+enum ApplicationArtworkResolver {
+    static func resolve(
+        application: LibraryApplication,
+        launcherURL: URL,
+        fileManager: FileManager = .default
+    ) -> URL? {
+        guard application.providerID == "steam" else { return nil }
+        let steamRoot = launcherURL.deletingLastPathComponent()
+
+        let candidates: [URL]
+        if application.providerItemID == "client" {
+            candidates = [
+                steamRoot.appending(path: "public/steam_tray.ico"),
+                steamRoot.appending(path: "public/steam_tray_mono.png")
+            ]
+        } else if let appID = application.providerItemID {
+            let cache = steamRoot.appending(path: "appcache/librarycache")
+            candidates = [
+                cache.appending(path: "\(appID)/library_600x900.jpg"),
+                cache.appending(path: "\(appID)_library_600x900.jpg"),
+                cache.appending(path: "\(appID)/header.jpg"),
+                cache.appending(path: "\(appID)_header.jpg")
+            ]
+        } else {
+            candidates = []
+        }
+
+        return candidates.first { fileManager.fileExists(atPath: $0.path) }
     }
 }

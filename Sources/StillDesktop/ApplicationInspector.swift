@@ -9,8 +9,13 @@ struct ApplicationInspector: View {
             Form {
                 Section {
                     HStack(spacing: 12) {
-                        Image(systemName: application.category == .game ? "gamecontroller.fill" : "app.fill")
-                            .font(.title)
+                        ApplicationArtwork(
+                            url: artworkURL(application),
+                            fallbackSystemImage: application.category == .game
+                                ? "gamecontroller.fill"
+                                : "app.fill",
+                            inset: 8
+                        )
                             .frame(width: 44, height: 44)
                             .background(.quaternary, in: RoundedRectangle(cornerRadius: 10))
                         VStack(alignment: .leading) {
@@ -79,6 +84,14 @@ struct ApplicationInspector: View {
     private func primaryEntry(_ application: LibraryApplication) -> LaunchEntry? {
         guard let id = application.launchEntryIDs.first else { return nil }
         return model.launchEntries.first { $0.id == id }
+    }
+
+    private func artworkURL(_ application: LibraryApplication) -> URL? {
+        guard let entry = primaryEntry(application) else { return nil }
+        return ApplicationArtworkResolver.resolve(
+            application: application,
+            launcherURL: entry.executableURL
+        )
     }
 
     private func providerStateLabel(_ state: WindowsApplicationInstallState) -> String {
