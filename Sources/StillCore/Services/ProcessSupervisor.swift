@@ -5,6 +5,7 @@ public actor ProcessSupervisor {
     private struct ManagedProcess {
         let process: Process
         let logHandle: FileHandle
+        let terminationPlan: ProcessTerminationPlan?
         var session: LaunchSession
     }
 
@@ -105,14 +106,32 @@ public actor ProcessSupervisor {
         guard managed.session.state == .running else {
             return
         }
-        try managed.session.transition(to: .stopping)
-        processes[sessionID] = managed
-
-        if managed.process.isRunning {
-            if force {
-                Darwin.kill(managed.process.processIdentifier, SIGKILL)
-            } else {
-                managed.process.terminate()
+        if let terminationPlan = managed.terminationPlan {
+            try runTerminationPlan(
+                terminationPlan,
+                force: force,
+                logURL: managed.session.logURL
+            )
+            let matchingIDs = processes.compactMap { id, candidate in
+                candidate.terminationPlan?.scopeIdentifier
+                    == terminationPlan.scopeIdentifier ? id : nil
+            }
+            for id in matchingIDs {
+                guard var candidate = processes[id], candidate.session.state == .running else {
+                    continue
+                }
+                try candidate.session.transition(to: .stopping)
+                processes[id] = candidate
+            }
+        } else {
+            try managed.session.transition(to: .stopping)
+            processes[sessionID] = managed
+            if managed.process.isRunning {
+                if force {
+                    Darwin.kill(managed.process.processIdentifier, SIGKILL)
+                } else {
+                    managed.process.terminate()
+                }
             }
         }
         reapTerminatedProcesses()
@@ -153,6 +172,7 @@ public actor ProcessSupervisor {
         return ManagedProcess(
             process: process,
             logHandle: logHandle,
+            terminationPlan: plan.terminationPlan,
             session: LaunchSession(
                 id: plan.sessionID,
                 applicationID: plan.applicationID,
@@ -160,6 +180,39 @@ public actor ProcessSupervisor {
                 logURL: plan.logURL
             )
         )
+    }
+
+    private func runTerminationPlan(
+        _ plan: ProcessTerminationPlan,
+        force: Bool,
+        logURL: URL?
+    ) throws {
+        let process = Process()
+        process.executableURL = force
+            ? plan.forceExecutableURL
+            : plan.gracefulExecutableURL
+        process.arguments = force ? plan.forceArguments : plan.gracefulArguments
+        process.environment = plan.environment
+        process.currentDirectoryURL = plan.workingDirectoryURL
+        var handle: FileHandle?
+        if let logURL {
+            handle = try FileHandle(forWritingTo: logURL)
+            try handle?.seekToEnd()
+            process.standardOutput = handle
+            process.standardError = handle
+        }
+        defer { try? handle?.close() }
+        guard let executableURL = process.executableURL,
+              fileManager.isExecutableFile(atPath: executableURL.path) else {
+            throw StillCoreError.engineBinaryUnavailable(
+                process.executableURL ?? plan.gracefulExecutableURL
+            )
+        }
+        try process.run()
+        process.waitUntilExit()
+        guard plan.acceptedExitCodes.contains(process.terminationStatus) else {
+            throw StillCoreError.processFailed(process.terminationStatus)
+        }
     }
 
     private func reapTerminatedProcesses() {

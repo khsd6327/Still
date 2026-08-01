@@ -7,7 +7,12 @@ public enum WineCommandBuilder {
         request: LaunchRequest,
         logURL: URL
     ) -> ProcessPlan {
-        ProcessPlan(
+        let environment = wineEnvironment(
+            bottle: request.bottle,
+            engine: engine,
+            overrides: request.environment
+        )
+        return ProcessPlan(
             sessionID: sessionID,
             applicationID: request.applicationID,
             environmentID: request.environmentID,
@@ -15,16 +20,24 @@ public enum WineCommandBuilder {
             arguments: [
                 "start",
                 "/unix",
+                "/wait",
                 request.executableURL.path
             ] + request.arguments,
-            environment: wineEnvironment(
-                bottle: request.bottle,
-                engine: engine,
-                overrides: request.environment
-            ),
+            environment: environment,
             workingDirectoryURL: request.workingDirectoryURL
                 ?? request.executableURL.deletingLastPathComponent(),
-            logURL: logURL
+            logURL: logURL,
+            terminationPlan: ProcessTerminationPlan(
+                scopeIdentifier: request.bottle.prefixURL.standardizedFileURL.path,
+                gracefulExecutableURL: engine.wineBinaryURL,
+                gracefulArguments: ["wineboot", "--end-session"],
+                forceExecutableURL: engine.wineBinaryURL
+                    .deletingLastPathComponent()
+                    .appending(path: "wineserver"),
+                forceArguments: ["-k"],
+                environment: environment,
+                workingDirectoryURL: request.bottle.prefixURL
+            )
         )
     }
 

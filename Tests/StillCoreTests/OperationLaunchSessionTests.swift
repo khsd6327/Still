@@ -155,6 +155,49 @@ final class OperationLaunchSessionTests: XCTestCase {
         XCTAssertTrue(isEmpty)
     }
 
+    func testWineTerminationMarksEverySessionInThePrefixStopping() async throws {
+        let rootURL = temporaryRoot("WineScope")
+        defer { try? FileManager.default.removeItem(at: rootURL) }
+        let supervisor = ProcessSupervisor()
+        let termination = ProcessTerminationPlan(
+            scopeIdentifier: rootURL.path,
+            gracefulExecutableURL: URL(filePath: "/usr/bin/true"),
+            gracefulArguments: [],
+            forceExecutableURL: URL(filePath: "/usr/bin/true"),
+            forceArguments: [],
+            environment: [:],
+            workingDirectoryURL: rootURL,
+            acceptedExitCodes: [0]
+        )
+        try FileManager.default.createDirectory(at: rootURL, withIntermediateDirectories: true)
+        let first = try await supervisor.launch(ProcessPlan(
+            applicationID: UUID(),
+            environmentID: UUID(),
+            executableURL: URL(filePath: "/bin/sleep"),
+            arguments: ["0.2"],
+            logURL: rootURL.appending(path: "first.log"),
+            terminationPlan: termination
+        ))
+        let second = try await supervisor.launch(ProcessPlan(
+            applicationID: UUID(),
+            environmentID: UUID(),
+            executableURL: URL(filePath: "/bin/sleep"),
+            arguments: ["0.2"],
+            logURL: rootURL.appending(path: "second.log"),
+            terminationPlan: termination
+        ))
+
+        try await supervisor.stop(sessionID: first.id)
+
+        let firstState = await supervisor.session(id: first.id)?.state
+        let secondState = await supervisor.session(id: second.id)?.state
+        XCTAssertEqual(firstState, .stopping)
+        XCTAssertEqual(secondState, .stopping)
+        try await Task.sleep(for: .milliseconds(250))
+        let activeSessions = await supervisor.activeSessions()
+        XCTAssertTrue(activeSessions.isEmpty)
+    }
+
     private func temporaryRoot(_ name: String) -> URL {
         FileManager.default.temporaryDirectory
             .appending(path: "Still\(name)Tests")
