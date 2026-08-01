@@ -1,6 +1,8 @@
 import Foundation
 
 public struct SteamLibraryScanner {
+    public static let nonUserFacingAppIDs: Set<String> = ["228980"]
+
     private let fileManager: FileManager
     private let parser: ValveKeyValueParser
 
@@ -76,6 +78,7 @@ public struct SteamLibraryScanner {
             let document = try parser.parse(text)
             guard let appState = document["AppState"],
                   let appID = appState["appid"]?.stringValue,
+                  !Self.nonUserFacingAppIDs.contains(appID),
                   let name = appState["name"]?.stringValue,
                   let installDirectory = appState["installdir"]?.stringValue else {
                 return nil

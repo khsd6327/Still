@@ -387,6 +387,16 @@ final class AppModel: ObservableObject {
                 for candidate in result.accepted {
                     try await persist(candidate, environment: environment)
                 }
+                if result.providerFailures["steam"] == nil {
+                    for application in applications where
+                        application.environmentID == environment.id
+                            && application.providerID == "steam"
+                            && application.providerItemID.map(
+                                SteamLibraryScanner.nonUserFacingAppIDs.contains
+                            ) == true {
+                        try await store.removeApplicationFromLibrary(id: application.id)
+                    }
+                }
                 pending.append(contentsOf: result.requiresConfirmation.map {
                     PendingDiscoveryCandidate(environmentID: environment.id, candidate: $0)
                 })

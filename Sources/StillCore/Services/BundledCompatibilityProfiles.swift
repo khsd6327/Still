@@ -7,6 +7,7 @@ public enum BundledCompatibilityProfiles {
         matchRules: [
             ProfileMatchRule(
                 providerID: "steam",
+                providerItemID: "client",
                 executableNames: ["steam.exe"]
             )
         ],

@@ -94,4 +94,40 @@ final class SteamLibraryScannerTests: XCTestCase {
 
         XCTAssertEqual(applications.first?.installState, .downloading)
     }
+
+    func testExcludesSteamworksCommonRedistributables() throws {
+        let prefixURL = temporaryURL.appending(path: "prefix")
+        let steamURL = prefixURL.appending(
+            path: "drive_c/Program Files (x86)/Steam"
+        )
+        let steamAppsURL = steamURL.appending(path: "steamapps")
+        try FileManager.default.createDirectory(
+            at: steamAppsURL,
+            withIntermediateDirectories: true
+        )
+        FileManager.default.createFile(
+            atPath: steamURL.appending(path: "steam.exe").path,
+            contents: Data("MZ".utf8)
+        )
+        let manifest = #"""
+        "AppState"
+        {
+            "appid" "228980"
+            "name" "Steamworks Common Redistributables"
+            "StateFlags" "4"
+            "installdir" "Steamworks Shared"
+        }
+        """#
+        try manifest.write(
+            to: steamAppsURL.appending(path: "appmanifest_228980.acf"),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let applications = try SteamLibraryScanner().scan(
+            bottle: Bottle(name: "Steam", prefixURL: prefixURL)
+        )
+
+        XCTAssertTrue(applications.isEmpty)
+    }
 }

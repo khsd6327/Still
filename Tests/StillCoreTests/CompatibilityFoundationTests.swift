@@ -147,6 +147,7 @@ final class CompatibilityFoundationTests: XCTestCase {
             environmentID: environmentID,
             name: "Steam",
             providerID: "steam",
+            providerItemID: "client",
             selectedProfileID: BundledCompatibilityProfiles.steam.id
         )
         let game = LibraryApplication(
