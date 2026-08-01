@@ -28,10 +28,6 @@ workflow separate from advanced engine controls.
 
 ![Still and the Windows Steam client running on macOS](Documentation/Assets/steam-client-on-macos.png)
 
-This capture shows Still beside a freshly initialized Windows Steam client.
-The Steam sign-in interface is rendered through the tested Wine and DXMT path
-on macOS.
-
 ## Features
 
 - Create, import, duplicate, back up, restore, and safely delete isolated Wine
@@ -62,7 +58,6 @@ See [Compatibility](Documentation/Compatibility.md) and
 [Engines](Documentation/Engines.md) for supported configuration boundaries.
 Validated application results are recorded in
 [Compatibility results](Documentation/Compatibility-Results.md).
-
 
 ## Development
 
