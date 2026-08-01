@@ -166,11 +166,13 @@ final class SteamLibraryScannerTests: XCTestCase {
             encoding: .utf8
         )
 
-        let applications = try SteamLibraryScanner().scan(
+        let result = try SteamLibraryScanner().scanResult(
             bottle: Bottle(name: "Steam", prefixURL: prefixURL)
         )
 
-        XCTAssertEqual(applications.map(\.id), ["steam-200"])
-        XCTAssertEqual(applications.first?.name, "Valid Game")
+        XCTAssertEqual(result.applications.map(\.id), ["steam-200"])
+        XCTAssertEqual(result.applications.first?.name, "Valid Game")
+        XCTAssertFalse(result.isComplete)
+        XCTAssertEqual(result.warnings.count, 1)
     }
 }

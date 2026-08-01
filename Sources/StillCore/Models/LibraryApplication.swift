@@ -23,6 +23,7 @@ public struct LibraryApplication: Codable, Hashable, Identifiable, Sendable {
     public var isHidden: Bool
     public var lastLaunchedAt: Date?
     public var providerManagedState: WindowsApplicationInstallState?
+    public var lastDiscoveryGeneration: UUID?
 
     public init(
         id: ID = UUID(),
@@ -36,7 +37,8 @@ public struct LibraryApplication: Codable, Hashable, Identifiable, Sendable {
         isFavorite: Bool = false,
         isHidden: Bool = false,
         lastLaunchedAt: Date? = nil,
-        providerManagedState: WindowsApplicationInstallState? = nil
+        providerManagedState: WindowsApplicationInstallState? = nil,
+        lastDiscoveryGeneration: UUID? = nil
     ) {
         self.id = id
         self.environmentID = environmentID
@@ -50,12 +52,13 @@ public struct LibraryApplication: Codable, Hashable, Identifiable, Sendable {
         self.isHidden = isHidden
         self.lastLaunchedAt = lastLaunchedAt
         self.providerManagedState = providerManagedState
+        self.lastDiscoveryGeneration = lastDiscoveryGeneration
     }
 
     private enum CodingKeys: String, CodingKey {
         case id, environmentID, name, category, providerID, providerItemID
         case launchEntryIDs, selectedProfileID, isFavorite, isHidden
-        case lastLaunchedAt, providerManagedState
+        case lastLaunchedAt, providerManagedState, lastDiscoveryGeneration
     }
 
     public init(from decoder: Decoder) throws {
@@ -74,6 +77,10 @@ public struct LibraryApplication: Codable, Hashable, Identifiable, Sendable {
         providerManagedState = try values.decodeIfPresent(
             WindowsApplicationInstallState.self,
             forKey: .providerManagedState
+        )
+        lastDiscoveryGeneration = try values.decodeIfPresent(
+            UUID.self,
+            forKey: .lastDiscoveryGeneration
         )
     }
 }

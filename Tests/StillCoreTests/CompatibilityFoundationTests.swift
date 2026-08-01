@@ -207,6 +207,35 @@ final class CompatibilityFoundationTests: XCTestCase {
         ))
     }
 
+    func testDiscoveryPreservesAnExistingProfileSelection() {
+        let matcher = CompatibilityProfileMatcher()
+        let application = LibraryApplication(
+            environmentID: UUID(),
+            name: "Steam",
+            providerID: "steam",
+            providerItemID: "client"
+        )
+
+        XCTAssertEqual(
+            matcher.profileIDForDiscovery(
+                existingSelection: "user-selected",
+                application: application,
+                executableURL: URL(filePath: "/tmp/steam.exe"),
+                profiles: BundledCompatibilityProfiles.all
+            ),
+            "user-selected"
+        )
+        XCTAssertEqual(
+            matcher.profileIDForDiscovery(
+                existingSelection: nil,
+                application: application,
+                executableURL: URL(filePath: "/tmp/steam.exe"),
+                profiles: BundledCompatibilityProfiles.all
+            ),
+            BundledCompatibilityProfiles.steam.id
+        )
+    }
+
     func testEnginePinChangeRequiresStopApprovalAndRestorePoint() async throws {
         let rootURL = FileManager.default.temporaryDirectory
             .appending(path: "StillEnginePinTests")

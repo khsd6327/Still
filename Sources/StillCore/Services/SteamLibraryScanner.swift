@@ -1,5 +1,20 @@
 import Foundation
 
+public struct SteamLibraryScanResult: Sendable {
+    public let applications: [InstalledWindowsApplication]
+    public let warnings: [String]
+
+    public var isComplete: Bool { warnings.isEmpty }
+
+    public init(
+        applications: [InstalledWindowsApplication],
+        warnings: [String] = []
+    ) {
+        self.applications = applications
+        self.warnings = warnings
+    }
+}
+
 public struct SteamLibraryScanner {
     public static let nonUserFacingAppIDs: Set<String> = ["228980"]
 
@@ -15,33 +30,49 @@ public struct SteamLibraryScanner {
     }
 
     public func scan(bottle: Bottle) throws -> [InstalledWindowsApplication] {
-        guard let steamRootURL = steamRoot(in: bottle) else { return [] }
+        try scanResult(bottle: bottle).applications
+    }
+
+    public func scanResult(bottle: Bottle) throws -> SteamLibraryScanResult {
+        guard let steamRootURL = steamRoot(in: bottle) else {
+            return SteamLibraryScanResult(applications: [])
+        }
         let launcherURL = steamRootURL.appending(path: "steam.exe")
-        guard fileManager.fileExists(atPath: launcherURL.path) else { return [] }
+        guard fileManager.fileExists(atPath: launcherURL.path) else {
+            return SteamLibraryScanResult(applications: [])
+        }
 
         var steamAppsURLs = [
             steamRootURL.appending(path: "steamapps", directoryHint: .isDirectory)
         ]
-        steamAppsURLs.append(
-            contentsOf: try additionalSteamAppsURLs(
+        var warnings: [String] = []
+        do {
+            steamAppsURLs.append(contentsOf: try additionalSteamAppsURLs(
                 primarySteamAppsURL: steamAppsURLs[0],
                 bottle: bottle
-            )
-        )
+            ))
+        } catch {
+            warnings.append("libraryfolders.vdf: \(error.localizedDescription)")
+        }
 
         var applications: [String: InstalledWindowsApplication] = [:]
         for steamAppsURL in steamAppsURLs {
-            for application in try scan(
+            let result = try scan(
                 steamAppsURL: steamAppsURL,
                 launcherURL: launcherURL
-            ) {
+            )
+            warnings.append(contentsOf: result.warnings)
+            for application in result.applications {
                 applications[application.id] = application
             }
         }
 
-        return applications.values.sorted {
-            $0.name.localizedStandardCompare($1.name) == .orderedAscending
-        }
+        return SteamLibraryScanResult(
+            applications: applications.values.sorted {
+                $0.name.localizedStandardCompare($1.name) == .orderedAscending
+            },
+            warnings: warnings
+        )
     }
 
     private func steamRoot(in bottle: Bottle) -> URL? {
@@ -63,8 +94,10 @@ public struct SteamLibraryScanner {
     private func scan(
         steamAppsURL: URL,
         launcherURL: URL
-    ) throws -> [InstalledWindowsApplication] {
-        guard fileManager.fileExists(atPath: steamAppsURL.path) else { return [] }
+    ) throws -> SteamLibraryScanResult {
+        guard fileManager.fileExists(atPath: steamAppsURL.path) else {
+            return SteamLibraryScanResult(applications: [])
+        }
         let manifestURLs = try fileManager.contentsOfDirectory(
             at: steamAppsURL,
             includingPropertiesForKeys: nil
@@ -74,15 +107,22 @@ public struct SteamLibraryScanner {
         }
 
         var applications: [InstalledWindowsApplication] = []
+        var warnings: [String] = []
         for manifestURL in manifestURLs {
             do {
                 let text = try String(contentsOf: manifestURL, encoding: .utf8)
                 let document = try parser.parse(text)
                 guard let appState = document["AppState"],
-                      let appID = appState["appid"]?.stringValue,
-                      !Self.nonUserFacingAppIDs.contains(appID),
-                      let name = appState["name"]?.stringValue,
+                      let appID = appState["appid"]?.stringValue else {
+                    warnings.append("\(manifestURL.lastPathComponent): missing AppState or appid")
+                    continue
+                }
+                guard !Self.nonUserFacingAppIDs.contains(appID) else {
+                    continue
+                }
+                guard let name = appState["name"]?.stringValue,
                       let installDirectory = appState["installdir"]?.stringValue else {
+                    warnings.append("\(manifestURL.lastPathComponent): missing name or installdir")
                     continue
                 }
 
@@ -112,10 +152,13 @@ public struct SteamLibraryScanner {
             } catch {
                 // Steam updates manifests independently. A partially written or
                 // damaged record must not suppress other installed applications.
-                continue
+                warnings.append("\(manifestURL.lastPathComponent): \(error.localizedDescription)")
             }
         }
-        return applications
+        return SteamLibraryScanResult(
+            applications: applications,
+            warnings: warnings
+        )
     }
 
     private func installState(

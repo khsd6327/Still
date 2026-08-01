@@ -87,6 +87,22 @@ final class ApplicationDiscoveryCoordinatorTests: XCTestCase {
         XCTAssertEqual(result.accepted.first?.category, .launcher)
         XCTAssertTrue(result.requiresConfirmation.isEmpty)
         XCTAssertTrue(result.providerFailures.isEmpty)
+        XCTAssertEqual(result.reconcilableProviderIDs, ["steam"])
+    }
+
+    func testIncompleteProviderIsNotEligibleForStaleReconciliation() {
+        let provider = StubDiscoveryProvider(
+            id: "partial",
+            candidates: [],
+            removesMissingApplications: true,
+            isComplete: false
+        )
+
+        let result = ApplicationDiscoveryCoordinator(
+            providers: [provider]
+        ).discover(in: Bottle(name: "Partial", prefixURL: URL(filePath: "/tmp/partial")))
+
+        XCTAssertTrue(result.reconcilableProviderIDs.isEmpty)
     }
 
     private func candidate(
@@ -115,8 +131,10 @@ final class ApplicationDiscoveryCoordinatorTests: XCTestCase {
 private struct StubDiscoveryProvider: ApplicationDiscoveryProvider {
     let id: String
     let candidates: [DiscoveredApplicationCandidate]
+    var removesMissingApplications = false
+    var isComplete = true
 
-    func discover(in bottle: Bottle) throws -> [DiscoveredApplicationCandidate] {
-        candidates
+    func discover(in bottle: Bottle) throws -> ProviderDiscoveryResult {
+        ProviderDiscoveryResult(candidates: candidates, isComplete: isComplete)
     }
 }

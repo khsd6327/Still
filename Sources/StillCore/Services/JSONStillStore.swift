@@ -343,6 +343,35 @@ public actor JSONStillStore {
         try save(document)
     }
 
+    @discardableResult
+    public func reconcileDiscoveredApplications(
+        environmentID: WindowsEnvironment.ID,
+        providerID: String,
+        discoveredProviderItemIDs: Set<String>
+    ) throws -> [LibraryApplication.ID] {
+        var document = try load()
+        guard document.environments.contains(where: { $0.id == environmentID }) else {
+            throw StillCoreError.invalidStore(
+                "Cannot reconcile applications for missing Environment '\(environmentID)'."
+            )
+        }
+        let staleIDs: Set<LibraryApplication.ID> = Set(
+            document.applications.compactMap { application -> LibraryApplication.ID? in
+            guard application.environmentID == environmentID,
+                  application.providerID == providerID,
+                  let itemID = application.providerItemID,
+                  !discoveredProviderItemIDs.contains(itemID) else {
+                return nil
+            }
+            return application.id
+        })
+        guard !staleIDs.isEmpty else { return [] }
+        document.applications.removeAll { staleIDs.contains($0.id) }
+        document.launchEntries.removeAll { staleIDs.contains($0.applicationID) }
+        try save(document)
+        return staleIDs.sorted { $0.uuidString < $1.uuidString }
+    }
+
     public func applications(
         environmentID: WindowsEnvironment.ID? = nil
     ) throws -> [LibraryApplication] {

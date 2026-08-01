@@ -43,13 +43,37 @@ public struct DiscoveredApplicationCandidate: Hashable, Identifiable, Sendable {
     }
 }
 
+public struct ProviderDiscoveryResult: Sendable {
+    public let candidates: [DiscoveredApplicationCandidate]
+    public let isComplete: Bool
+    public let warnings: [String]
+
+    public init(
+        candidates: [DiscoveredApplicationCandidate],
+        isComplete: Bool = true,
+        warnings: [String] = []
+    ) {
+        self.candidates = candidates
+        self.isComplete = isComplete
+        self.warnings = warnings
+    }
+}
+
 public struct DiscoveryResult: Sendable {
+    public let generation: UUID
     public let accepted: [DiscoveredApplicationCandidate]
     public let requiresConfirmation: [DiscoveredApplicationCandidate]
     public let providerFailures: [String: String]
+    public let providerWarnings: [String: [String]]
+    public let reconcilableProviderIDs: Set<String>
 }
 
 public protocol ApplicationDiscoveryProvider {
     var id: String { get }
-    func discover(in bottle: Bottle) throws -> [DiscoveredApplicationCandidate]
+    var removesMissingApplications: Bool { get }
+    func discover(in bottle: Bottle) throws -> ProviderDiscoveryResult
+}
+
+public extension ApplicationDiscoveryProvider {
+    var removesMissingApplications: Bool { false }
 }

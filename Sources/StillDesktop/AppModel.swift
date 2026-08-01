@@ -387,20 +387,30 @@ final class AppModel: ObservableObject {
         for environment in environments
         where environmentID == nil || environment.id == environmentID {
             let result = discoveryCoordinator.discover(in: bottle(from: environment))
-            if !result.providerFailures.isEmpty { failureCount += 1 }
+            if !result.providerFailures.isEmpty || !result.providerWarnings.isEmpty {
+                failureCount += 1
+            }
             do {
                 for candidate in result.accepted {
-                    try await persist(candidate, environment: environment)
+                    try await persist(
+                        candidate,
+                        environment: environment,
+                        generation: result.generation
+                    )
                 }
-                if result.providerFailures["steam"] == nil {
-                    for application in applications where
-                        application.environmentID == environment.id
-                            && application.providerID == "steam"
-                            && application.providerItemID.map(
-                                SteamLibraryScanner.nonUserFacingAppIDs.contains
-                            ) == true {
-                        try await store.removeApplicationFromLibrary(id: application.id)
-                    }
+                let candidates = result.accepted + result.requiresConfirmation
+                for providerID in result.reconcilableProviderIDs {
+                    let discoveredItemIDs: Set<String> = Set(candidates.compactMap {
+                        candidate -> String? in
+                        guard candidate.providerID == providerID else { return nil }
+                        return candidate.application.sourceIdentifier
+                            ?? candidate.application.id
+                    })
+                    try await store.reconcileDiscoveredApplications(
+                        environmentID: environment.id,
+                        providerID: providerID,
+                        discoveredProviderItemIDs: discoveredItemIDs
+                    )
                 }
                 pending.append(contentsOf: result.requiresConfirmation.map {
                     PendingDiscoveryCandidate(environmentID: environment.id, candidate: $0)
@@ -417,7 +427,11 @@ final class AppModel: ObservableObject {
             where: { $0.id == pending.environmentID }
         ) else { return }
         do {
-            try await persist(pending.candidate, environment: environment)
+            try await persist(
+                pending.candidate,
+                environment: environment,
+                generation: UUID()
+            )
             pendingDiscoveryCandidates.removeAll { $0.id == pending.id }
             await load()
         } catch { errorMessage = error.localizedDescription }
@@ -987,7 +1001,8 @@ final class AppModel: ObservableObject {
 
     private func persist(
         _ candidate: DiscoveredApplicationCandidate,
-        environment: WindowsEnvironment
+        environment: WindowsEnvironment,
+        generation: UUID
     ) async throws {
         let item = candidate.application
         let applicationID = StableID.derived(
@@ -1007,13 +1022,15 @@ final class AppModel: ObservableObject {
             isFavorite: existing?.isFavorite ?? false,
             isHidden: existing?.isHidden ?? false,
             lastLaunchedAt: existing?.lastLaunchedAt,
-            providerManagedState: candidate.providerManagedState
+            providerManagedState: candidate.providerManagedState,
+            lastDiscoveryGeneration: generation
         )
-        application.selectedProfileID = profileMatcher.profile(
-            for: application,
+        application.selectedProfileID = profileMatcher.profileIDForDiscovery(
+            existingSelection: existing?.selectedProfileID,
+            application: application,
             executableURL: item.launcherURL,
             profiles: BundledCompatibilityProfiles.all
-        )?.id ?? (existing?.selectedProfileID == "custom" ? "custom" : nil)
+        )
         try await store.saveApplication(application, launchEntries: [
             LaunchEntry(
                 id: entryID,

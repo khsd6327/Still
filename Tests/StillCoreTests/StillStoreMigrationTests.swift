@@ -195,6 +195,73 @@ final class StillStoreMigrationTests: XCTestCase {
         XCTAssertEqual(document.launchEntries, [entry])
     }
 
+    func testDiscoveryReconciliationRemovesOnlyMissingProviderItems() async throws {
+        let root = temporaryRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = JSONStillStore(rootURL: root)
+        let environment = WindowsEnvironment(
+            name: "Steam",
+            prefixURL: root.appending(path: "Environments/Steam")
+        )
+        try await store.saveEnvironment(environment)
+
+        let generation = UUID()
+        let retainedID = UUID()
+        let retainedEntryID = UUID()
+        let retained = LibraryApplication(
+            id: retainedID,
+            environmentID: environment.id,
+            name: "Retained",
+            providerID: "steam",
+            providerItemID: "100",
+            launchEntryIDs: [retainedEntryID],
+            selectedProfileID: "user-selected",
+            isFavorite: true,
+            lastDiscoveryGeneration: generation
+        )
+        try await store.saveApplication(retained, launchEntries: [
+            LaunchEntry(
+                id: retainedEntryID,
+                applicationID: retainedID,
+                executableURL: environment.prefixURL.appending(path: "steam.exe"),
+                arguments: ["-applaunch", "100"]
+            )
+        ])
+
+        let staleID = UUID()
+        let staleEntryID = UUID()
+        let stale = LibraryApplication(
+            id: staleID,
+            environmentID: environment.id,
+            name: "Stale",
+            providerID: "steam",
+            providerItemID: "200",
+            launchEntryIDs: [staleEntryID]
+        )
+        try await store.saveApplication(stale, launchEntries: [
+            LaunchEntry(
+                id: staleEntryID,
+                applicationID: staleID,
+                executableURL: environment.prefixURL.appending(path: "steam.exe"),
+                arguments: ["-applaunch", "200"]
+            )
+        ])
+
+        let removed = try await store.reconcileDiscoveredApplications(
+            environmentID: environment.id,
+            providerID: "steam",
+            discoveredProviderItemIDs: ["100"]
+        )
+        let document = try await store.load()
+
+        XCTAssertEqual(removed, [staleID])
+        XCTAssertEqual(document.applications.map(\.id), [retainedID])
+        XCTAssertEqual(document.applications.first?.selectedProfileID, "user-selected")
+        XCTAssertEqual(document.applications.first?.lastDiscoveryGeneration, generation)
+        XCTAssertTrue(document.applications.first?.isFavorite == true)
+        XCTAssertEqual(document.launchEntries.map(\.id), [retainedEntryID])
+    }
+
     func testRemovingEnvironmentRecordLeavesPrefixAndRemovesRelatedRecords() async throws {
         let root = temporaryRoot()
         defer { try? FileManager.default.removeItem(at: root) }

@@ -3,6 +3,19 @@ import Foundation
 public struct CompatibilityProfileMatcher: Sendable {
     public init() {}
 
+    public func profileIDForDiscovery(
+        existingSelection: String?,
+        application: LibraryApplication,
+        executableURL: URL,
+        profiles: [CompatibilityProfile]
+    ) -> String? {
+        existingSelection ?? profile(
+            for: application,
+            executableURL: executableURL,
+            profiles: profiles
+        )?.id
+    }
+
     public func profile(
         for application: LibraryApplication,
         executableURL: URL,
