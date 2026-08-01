@@ -26,6 +26,7 @@ public enum StillCoreError: LocalizedError, Equatable {
     case unsupportedApplicationPinSchema(Int)
     case invalidCompatibilityConfiguration(String)
     case invalidStore(String)
+    case concurrentStoreModification(expected: UInt64, actual: UInt64)
     case invalidOperationTransition(from: String, to: String)
     case environmentOperationInProgress(UUID, UUID)
     case duplicateLaunch(UUID)
@@ -91,6 +92,8 @@ public enum StillCoreError: LocalizedError, Equatable {
             "The bottle compatibility configuration is invalid. \(reason)"
         case .invalidStore(let reason):
             "The Still data store is invalid. \(reason)"
+        case .concurrentStoreModification(let expected, let actual):
+            "The Still data store changed concurrently. Expected revision \(expected), found \(actual). Reload before retrying."
         case .invalidOperationTransition(let from, let to):
             "An Operation cannot transition from '\(from)' to '\(to)'."
         case .environmentOperationInProgress(let environmentID, let operationID):

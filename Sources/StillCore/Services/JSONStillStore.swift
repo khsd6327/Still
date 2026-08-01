@@ -1,3 +1,5 @@
+import CryptoKit
+import Darwin
 import Foundation
 
 public actor JSONStillStore {
@@ -6,14 +8,18 @@ public actor JSONStillStore {
     public let legacyBottlesURL: URL
     public let legacyPinsURL: URL
     public let migrationBackupURL: URL
+    public let lockURL: URL
+    public let corruptStoresURL: URL
 
     private let fileManager: FileManager
     private let migrator: StillStoreMigrator
+    private let validator: StillStoreValidator
 
     public init(
         rootURL: URL = JSONStillStore.defaultRootURL(),
         fileManager: FileManager = .default,
-        migrator: StillStoreMigrator = StillStoreMigrator()
+        migrator: StillStoreMigrator = StillStoreMigrator(),
+        validator: StillStoreValidator = StillStoreValidator()
     ) {
         self.rootURL = rootURL
         self.storeURL = rootURL.appending(path: "store.json")
@@ -22,8 +28,14 @@ public actor JSONStillStore {
         self.migrationBackupURL = rootURL
             .appending(path: "Migration Backups", directoryHint: .isDirectory)
             .appending(path: "schema-1", directoryHint: .isDirectory)
+        self.lockURL = rootURL.appending(path: ".store.lock")
+        self.corruptStoresURL = rootURL.appending(
+            path: "Corrupt Stores",
+            directoryHint: .isDirectory
+        )
         self.fileManager = fileManager
         self.migrator = migrator
+        self.validator = validator
     }
 
     public static func defaultRootURL() -> URL {
@@ -38,7 +50,21 @@ public actor JSONStillStore {
 
     public func load() throws -> StillStoreDocument {
         if fileManager.fileExists(atPath: storeURL.path) {
-            let document = try decode(Data(contentsOf: storeURL))
+            let data = try Data(contentsOf: storeURL)
+            let document: StillStoreDocument
+            do {
+                document = try decode(data)
+                try validator.validate(document)
+            } catch let error as StillCoreError {
+                if case .unsupportedSchema = error { throw error }
+                try preserveCorruptStore(data)
+                throw error
+            } catch {
+                try preserveCorruptStore(data)
+                throw StillCoreError.invalidStore(
+                    "The current store could not be decoded. The original bytes were preserved for recovery."
+                )
+            }
             guard document.schemaVersion == StillStoreDocument.currentSchemaVersion else {
                 throw StillCoreError.unsupportedSchema(document.schemaVersion)
             }
@@ -56,18 +82,43 @@ public actor JSONStillStore {
             try backUpLegacyFiles()
         }
         try save(document)
-        return document
+        return try load()
     }
 
     public func save(_ document: StillStoreDocument) throws {
         guard document.schemaVersion == StillStoreDocument.currentSchemaVersion else {
             throw StillCoreError.unsupportedSchema(document.schemaVersion)
         }
+        try validator.validate(document)
         try fileManager.createDirectory(
             at: rootURL,
             withIntermediateDirectories: true
         )
-        try encoder.encode(document).write(to: storeURL, options: .atomic)
+        try withStoreLock {
+            let actualRevision: UInt64
+            if fileManager.fileExists(atPath: storeURL.path) {
+                let currentData = try Data(contentsOf: storeURL)
+                do {
+                    let current = try decode(currentData)
+                    try validator.validate(current)
+                    actualRevision = current.revision
+                } catch {
+                    try preserveCorruptStore(currentData)
+                    throw error
+                }
+            } else {
+                actualRevision = 0
+            }
+            guard document.revision == actualRevision else {
+                throw StillCoreError.concurrentStoreModification(
+                    expected: document.revision,
+                    actual: actualRevision
+                )
+            }
+            var next = document
+            next.revision = actualRevision + 1
+            try encoder.encode(next).write(to: storeURL, options: .atomic)
+        }
     }
 
     public func environments() throws -> [WindowsEnvironment] {
@@ -183,7 +234,8 @@ public actor JSONStillStore {
             )
         }
         let suppliedEntryIDs = Set(launchEntries.map(\.id))
-        guard Set(application.launchEntryIDs).isSubset(of: suppliedEntryIDs),
+        guard Set(application.launchEntryIDs) == suppliedEntryIDs,
+              application.launchEntryIDs.count == suppliedEntryIDs.count,
               launchEntries.allSatisfy({ $0.applicationID == application.id }) else {
             throw StillCoreError.invalidStore(
                 "Application '\(application.id)' has inconsistent launch entries."
@@ -274,6 +326,43 @@ public actor JSONStillStore {
             return
         }
         try fileManager.copyItem(at: source, to: destination)
+    }
+
+    private func preserveCorruptStore(_ data: Data) throws {
+        try fileManager.createDirectory(
+            at: corruptStoresURL,
+            withIntermediateDirectories: true
+        )
+        let digest = SHA256.hash(data: data)
+            .map { String(format: "%02x", $0) }
+            .joined()
+        let destination = corruptStoresURL.appending(
+            path: "store-\(digest.prefix(16)).json"
+        )
+        if !fileManager.fileExists(atPath: destination.path) {
+            try data.write(to: destination, options: .atomic)
+        }
+    }
+
+    private func withStoreLock<T>(_ operation: () throws -> T) throws -> T {
+        let descriptor = lockURL.path.withCString {
+            Darwin.open($0, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR)
+        }
+        guard descriptor >= 0 else {
+            throw StillCoreError.invalidStore("The store lock could not be opened.")
+        }
+        defer { Darwin.close(descriptor) }
+        var fileLock = Darwin.flock()
+        fileLock.l_type = Int16(F_WRLCK)
+        fileLock.l_whence = Int16(SEEK_SET)
+        guard Darwin.fcntl(descriptor, F_SETLKW, &fileLock) != -1 else {
+            throw StillCoreError.invalidStore("The store lock could not be acquired.")
+        }
+        defer {
+            fileLock.l_type = Int16(F_UNLCK)
+            _ = Darwin.fcntl(descriptor, F_SETLK, &fileLock)
+        }
+        return try operation()
     }
 
     private func decode(_ data: Data) throws -> StillStoreDocument {

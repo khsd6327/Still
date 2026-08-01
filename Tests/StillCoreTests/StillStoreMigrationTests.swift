@@ -239,6 +239,86 @@ final class StillStoreMigrationTests: XCTestCase {
         XCTAssertTrue(document.operations.isEmpty)
     }
 
+    func testConcurrentStoreInstancesRejectLostUpdate() async throws {
+        let root = temporaryRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let firstStore = JSONStillStore(rootURL: root)
+        let secondStore = JSONStillStore(rootURL: root)
+        var firstDocument = try await firstStore.load()
+        var staleDocument = try await secondStore.load()
+
+        firstDocument.environments.append(WindowsEnvironment(
+            name: "First",
+            prefixURL: root.appending(path: "First")
+        ))
+        try await firstStore.save(firstDocument)
+
+        staleDocument.environments.append(WindowsEnvironment(
+            name: "Stale",
+            prefixURL: root.appending(path: "Stale")
+        ))
+        do {
+            try await secondStore.save(staleDocument)
+            XCTFail("Expected a concurrent store modification failure.")
+        } catch let error as StillCoreError {
+            guard case .concurrentStoreModification = error else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+        }
+
+        let reloaded = try await firstStore.load()
+        XCTAssertEqual(reloaded.environments.map(\.name), ["First"])
+        XCTAssertGreaterThan(reloaded.revision, staleDocument.revision)
+    }
+
+    func testCorruptStoreIsPreservedWithoutOverwrite() async throws {
+        let root = temporaryRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let storeURL = root.appending(path: "store.json")
+        let corruptData = Data("{not-json".utf8)
+        try corruptData.write(to: storeURL)
+        let store = JSONStillStore(rootURL: root)
+
+        do {
+            _ = try await store.load()
+            XCTFail("Expected corrupt store failure.")
+        } catch {
+            // The original bytes must remain available for recovery.
+        }
+
+        XCTAssertEqual(try Data(contentsOf: storeURL), corruptData)
+        let preserved = try FileManager.default.contentsOfDirectory(
+            at: root.appending(path: "Corrupt Stores"),
+            includingPropertiesForKeys: nil
+        )
+        XCTAssertEqual(preserved.count, 1)
+        XCTAssertEqual(try Data(contentsOf: preserved[0]), corruptData)
+    }
+
+    func testRejectsDocumentWithBrokenRelationshipsBeforeWriting() async throws {
+        let root = temporaryRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = JSONStillStore(rootURL: root)
+        let orphan = LibraryApplication(
+            environmentID: UUID(),
+            name: "Orphan"
+        )
+
+        do {
+            try await store.save(StillStoreDocument(applications: [orphan]))
+            XCTFail("Expected relationship validation failure.")
+        } catch let error as StillCoreError {
+            guard case .invalidStore = error else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+        }
+
+        XCTAssertFalse(
+            FileManager.default.fileExists(atPath: root.appending(path: "store.json").path)
+        )
+    }
+
     private func application(
         id: String,
         executableURL: URL
