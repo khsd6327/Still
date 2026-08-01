@@ -86,7 +86,9 @@ schemes:
         - name: Install Still in Applications
           settingsTarget: Still
           script: |
-            if [ "${CONFIGURATION:-}" != "Debug" ]; then
+            set -eu
+
+            if [ "${CONFIGURATION:-}" != "Debug" ] || [ "${ACTION:-}" != "build" ] || [ "${CODE_SIGNING_ALLOWED:-YES}" = "NO" ]; then
               exit 0
             fi
 

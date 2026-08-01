@@ -1,0 +1,92 @@
+import StillCore
+import SwiftUI
+
+struct ApplicationInspector: View {
+    @ObservedObject var model: AppModel
+
+    var body: some View {
+        if let application = model.selectedApplication {
+            Form {
+                Section {
+                    HStack(spacing: 12) {
+                        Image(systemName: application.category == .game ? "gamecontroller.fill" : "app.fill")
+                            .font(.title)
+                            .frame(width: 44, height: 44)
+                            .background(.quaternary, in: RoundedRectangle(cornerRadius: 10))
+                        VStack(alignment: .leading) {
+                            Text(application.name).font(.headline)
+                            Text(application.category.rawValue.capitalized)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    Button("Run", systemImage: "play.fill") {
+                        Task { await model.launchSelectedApplication() }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(
+                        application.providerManagedState != nil
+                            && application.providerManagedState != .installed
+                    )
+                    Button(
+                        application.isFavorite ? "Remove from Favorites" : "Add to Favorites",
+                        systemImage: application.isFavorite ? "star.slash" : "star"
+                    ) {
+                        Task { await model.toggleFavorite(application) }
+                    }
+                }
+                Section("Status") {
+                    LabeledContent("Environment", value: environmentName(application))
+                    LabeledContent("Last Used", value: application.lastLaunchedAt?.formatted() ?? "Never")
+                    LabeledContent("Compatibility", value: application.selectedProfileID ?? "Environment Default")
+                    if let provider = application.providerID {
+                        LabeledContent("Provider", value: provider.capitalized)
+                    }
+                    if let state = application.providerManagedState {
+                        LabeledContent("Provider status", value: providerStateLabel(state))
+                    }
+                }
+                Section("Files") {
+                    if let entry = primaryEntry(application) {
+                        Text(entry.executableURL.path)
+                            .font(.caption.monospaced())
+                            .textSelection(.enabled)
+                            .lineLimit(3)
+                        Button("Reveal in Finder", systemImage: "folder") {
+                            model.revealSelectedApplication()
+                        }
+                    } else {
+                        Text("Launch file is missing.").foregroundStyle(.secondary)
+                    }
+                }
+                Section("Recent Failures") {
+                    Text("No recorded failures.").foregroundStyle(.secondary)
+                }
+            }
+            .formStyle(.grouped)
+            .navigationTitle("Inspector")
+        } else {
+            ContentUnavailableView(
+                "No Application Selected",
+                systemImage: "cursorarrow.click"
+            )
+        }
+    }
+
+    private func environmentName(_ application: LibraryApplication) -> String {
+        model.environments.first(where: { $0.id == application.environmentID })?.name ?? "Missing"
+    }
+
+    private func primaryEntry(_ application: LibraryApplication) -> LaunchEntry? {
+        guard let id = application.launchEntryIDs.first else { return nil }
+        return model.launchEntries.first { $0.id == id }
+    }
+
+    private func providerStateLabel(_ state: WindowsApplicationInstallState) -> String {
+        switch state {
+        case .installed: "Installed"
+        case .downloading: "Downloading"
+        case .needsUpdate: "Update Required"
+        case .unknown: "Unknown"
+        }
+    }
+}

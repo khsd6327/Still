@@ -7,24 +7,50 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0214BB76358E9A19605D82A0 /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBD22D67E34E7F76C7D548E4 /* SidebarView.swift */; };
+		0273FD8A5CFB5752325CD6D3 /* JSONStillStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A4D039E843D38939E7A34C4 /* JSONStillStore.swift */; };
 		02839A39F990E35CBAA362ED /* SteamBootstrapper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 930FC14E6420A2BB5C9C9843 /* SteamBootstrapper.swift */; };
+		044EA7B07EABD7600485A0FF /* RecoverySafetyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4909447EF1E68FA39D43DA8A /* RecoverySafetyTests.swift */; };
+		056A2BF13BA3E75F533CA5A0 /* StillStoreMigrator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A90C642B70DB7601AA160A16 /* StillStoreMigrator.swift */; };
+		07C871467D3C55923F838E56 /* BackupService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09D1022DAAB0477B699B751B /* BackupService.swift */; };
+		07D85B8A819FAA0F4C67C25A /* Environment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E709BB30A19196F038EDA1C /* Environment.swift */; };
 		0977AFA93BF94889A7086825 /* BundledApplicationRecipes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6CF650CE97B7BC3F02E27D7E /* BundledApplicationRecipes.swift */; };
 		0B6204C21E8AE6822DF8DF73 /* ProductIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA41447ACB35E8B3F2DA6B4F /* ProductIdentity.swift */; };
+		0C0FBE116AF58DE34736F49B /* EnvironmentOperationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D887851AF77A914C08FA530 /* EnvironmentOperationCoordinator.swift */; };
+		0CB5DC78D6976F36CDC407E6 /* SupportBundleServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0ADA425C886A3002D15DD0D /* SupportBundleServiceTests.swift */; };
+		0EAA10F75C7B73D78F1FEADE /* RepairService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F27A98A2906B708CA540286 /* RepairService.swift */; };
+		12704BB792761382BC414427 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = F78C5DDB3DB57C5FA00CD8DD /* AppState.swift */; };
 		1343D9CA2E07E25888288AEB /* WindowsProcessListParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E25C40F47438C736FA1E4C30 /* WindowsProcessListParserTests.swift */; };
+		13BB13C8ABBBE25E14854CE7 /* DXMTBridgeValidatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2AAF8FD98234CDC4820E04B /* DXMTBridgeValidatorTests.swift */; };
+		13D98F60A5D4E4ABF92439E2 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F00D4A920651C79335F0BE5 /* AppModel.swift */; };
 		150A64A33F2ABFACA54D2E54 /* JSONBottleStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C95F7221EE83F1953902225 /* JSONBottleStore.swift */; };
+		16735A23A772B78FB215539C /* DiscoveryReviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F6247D32F050DDD7130E30E /* DiscoveryReviewView.swift */; };
 		191E444227F05C0FB836791D /* EngineManifest.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADB8934289AF933ED86C6A07 /* EngineManifest.swift */; };
 		19A6DB2B1650F81E4D43D857 /* BundledEngineCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57828174F87767B29893CB42 /* BundledEngineCatalog.swift */; };
+		1DA5CFF9E4C8C35C64E2A17D /* StillStoreMigrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59413BA37A7EF7F22E7835F0 /* StillStoreMigrationTests.swift */; };
+		1E375394FD56C7BFC04690C1 /* ApplicationDiscoveryCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4162777B334F8A680A4A9067 /* ApplicationDiscoveryCoordinatorTests.swift */; };
 		1F841839337C696A4F5E553F /* InstalledWindowsApplication.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A796481567BE9CD09570049 /* InstalledWindowsApplication.swift */; };
+		1F9770B68B12D9EB8D61E19F /* Discovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0DFB5CD57920CD094C09CD21 /* Discovery.swift */; };
 		20AC86F567D9D7F42F7DA712 /* BottleProvisioner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15AA21A04951CA88636F93C6 /* BottleProvisioner.swift */; };
 		2465025DF4F046EEAED50F23 /* WindowsApplicationRecipe.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8186451672745A7EE64D345 /* WindowsApplicationRecipe.swift */; };
 		2B3F7A0185102AD8A03D6BBE /* TarXZArchiveExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3C1C2F6C2B3A02784947BB1 /* TarXZArchiveExtractor.swift */; };
+		2F528F5BC0B375545F86CC22 /* LibraryApplication.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7480CFE9ED2C36424381012 /* LibraryApplication.swift */; };
 		30713452A859978AD99EC4BD /* SteamLibraryScannerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9EE0023B93193FD4A719EF5E /* SteamLibraryScannerTests.swift */; };
 		31270FA665B7393358BD5F7B /* SteamLibraryScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6C0115CCA65491CA4522962 /* SteamLibraryScanner.swift */; };
+		351E3341950E33977F6953DB /* OperationLaunchSessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE2DE7099A2810030CABAE9B /* OperationLaunchSessionTests.swift */; };
 		360B79702C9837322D01056A /* StillCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 04D580A7850139A191A3C959 /* StillCore.framework */; };
+		3B01822384244BF863798D34 /* Recovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 128FE02A9D4B57B811DE7E10 /* Recovery.swift */; };
+		3BEBD434FFF4C063C5864909 /* BundledCompatibilityProfiles.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2847CD8F28CA6F2D7CD664FD /* BundledCompatibilityProfiles.swift */; };
 		3C9372B99C6F5694D84A4BF4 /* LocalWineEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8575F035ACB94B25EAB1036E /* LocalWineEngine.swift */; };
+		4403E09329C6F809D844A422 /* CompatibilityResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = A43AEAC209ECA7E1105F93E6 /* CompatibilityResolver.swift */; };
+		460A8C4CB78B70D6CAFD9AEC /* CompatibilityFoundationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BA7610F1F246F629DDE079E /* CompatibilityFoundationTests.swift */; };
 		4683FF2CF1FE80DFD48A53B4 /* ProcessPlan.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88D606D40F75A8CBB52F264A /* ProcessPlan.swift */; };
-		4DD965E2D004272A113FE472 /* WindowsInstallerDownloader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D89753043074EAA6715A3FB /* WindowsInstallerDownloader.swift */; };
+		4827D972203CA1B51D772512 /* StillStoreDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74DA2C359E9C45C03F870BE9 /* StillStoreDocument.swift */; };
+		4C56298D927516885FBF5A08 /* StableID.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0490D61AF284E5C72C24F8D /* StableID.swift */; };
+		58DB51579D737E0C0970AE86 /* AppContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47DB75A30DE08EDE8CC26529 /* AppContainer.swift */; };
+		599001346002DD82307789D0 /* ApplicationInspector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8BE16FAD9B6C2646B361A35E /* ApplicationInspector.swift */; };
 		5DEC1A787F876D7DBB999EB5 /* ApplicationLibraryScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCD8061811699BD8330516B5 /* ApplicationLibraryScanner.swift */; };
+		5E612AFA431EB6ED21BEB883 /* CapabilityRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F226E7B0AA09DD7D6A88A82 /* CapabilityRegistry.swift */; };
 		616B5B4F6DF428E9EABAED3B /* JSONBottleStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B80270DE89381BF90EC70E1D /* JSONBottleStoreTests.swift */; };
 		647BBEDC388F3CB07E937EEF /* ProcessSupervisor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59367E2D537F173E9466514F /* ProcessSupervisor.swift */; };
 		67EDA103792A74378B58740D /* EngineInstaller.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6038FF4C1E066D257E255DF /* EngineInstaller.swift */; };
@@ -33,31 +59,58 @@
 		70B768295BBA5C1F51DA918C /* WineCommandBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F42F62BE4405785E33DA848 /* WineCommandBuilder.swift */; };
 		798C245DBFA5A4C62DFF4D3C /* StillDesktopApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82E967664122B023E75781E1 /* StillDesktopApp.swift */; };
 		7C2AF6A67E7601CD8F75F41C /* StillCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 04D580A7850139A191A3C959 /* StillCore.framework */; };
+		84BBADEE78DE4F5557C72F11 /* ApplicationDiscoveryCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F5CB172947D2BAA9CB54A54 /* ApplicationDiscoveryCoordinator.swift */; };
+		87042FC9102CD3EE92356E8E /* FileTreeServices.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B3E91F092131B1C5C303C4D /* FileTreeServices.swift */; };
+		89F1021F4AE3805EFF194BCF /* ProcessAttributor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68FAEB667CAF74427A956F99 /* ProcessAttributor.swift */; };
+		8BE7FEAD77A90EC6C889A0C0 /* LibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39C346E07F8EE6F57A6B926B /* LibraryView.swift */; };
 		8D8609F7D023947F5EDFC08A /* ValveKeyValueParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 297CC2B02C6FE31D383F4408 /* ValveKeyValueParser.swift */; };
+		8E6D10C456920D3D0557A5D8 /* EnvironmentsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C00E034B48823303EA71DC8D /* EnvironmentsView.swift */; };
+		921691B1BC7FB74CDEA4A274 /* CompatibilityProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00E04CE193BAFDACCDD44BC /* CompatibilityProfile.swift */; };
 		94FBC729860598CD20C924D0 /* BottleProvisionerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 028F179133D5CCB3BC7BD670 /* BottleProvisionerTests.swift */; };
+		9B2289FD2BE0F2DAFFB4A0AC /* TerminationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96288B92CC46337E386A61A0 /* TerminationCoordinator.swift */; };
+		9B858DB6BACAFC6BB59A98E1 /* EnvironmentRecoveryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04C599C356ED1A317486DC30 /* EnvironmentRecoveryService.swift */; };
+		9BAFF870A081C03A518781DE /* ApplicationLifecycle.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF8C2CBC05E8060273FD0B0B /* ApplicationLifecycle.swift */; };
+		A21BAD240D0113486038828E /* Operation.swift in Sources */ = {isa = PBXBuildFile; fileRef = F456F04AE6B84288B81D462A /* Operation.swift */; };
 		A4D41498B0C684A7A8C0572F /* Bottle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A2C836863F55F6983DD09A8 /* Bottle.swift */; };
+		A655934AE3EAA33817333F97 /* ActivityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 066C4D80C4609D220FD7944F /* ActivityView.swift */; };
+		A7A6ADE396DCFDDAA80CC753 /* DeveloperView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C521089E24C42ABA890A595 /* DeveloperView.swift */; };
+		A82BC29C0A37EC0C2DA33B1A /* DXMTBridgeValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CAB4EA213588471346F65EB /* DXMTBridgeValidator.swift */; };
+		AB2F9306B7FD1C03772497C6 /* StillCommands.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79660805A836A3AE804666D8 /* StillCommands.swift */; };
 		ABDE7B520ECA1B78A9D051E6 /* ApplicationRecipeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6259F0F9FC83FEAD78EE79D /* ApplicationRecipeTests.swift */; };
+		B23273499E334B0549A4DFBB /* Capability.swift in Sources */ = {isa = PBXBuildFile; fileRef = 563C66645802DAD7AD9DA6D1 /* Capability.swift */; };
 		B5274A23652E8D02A0F92F94 /* SHA256Verifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D59945F0FB95EA3711F3E84 /* SHA256Verifier.swift */; };
+		B5816C8C3A7D5DD0F263F59B /* DXMTBridgeManifest.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B699A7BD956ACA491391B7B /* DXMTBridgeManifest.swift */; };
+		B6EAE08476B34191EFBDDB1B /* FeatureStateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7FE82F6B7835000204F38D9 /* FeatureStateView.swift */; };
 		B7A9D624F0989DD584E218CA /* LogLocations.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA8702E1886D5E5B6A1FDA86 /* LogLocations.swift */; };
+		B84D99197B467211AC9C59B2 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0D082EB02B2E3825A3DFBE1 /* SettingsView.swift */; };
 		B92F944488218B31DE241B22 /* WindowsExecutableScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BC4F55CA9FA96602041A234 /* WindowsExecutableScanner.swift */; };
 		BAE749EC0FA5F270B64A6CC9 /* WineProcessTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCA9EA7D3D18E5DA39A979BC /* WineProcessTests.swift */; };
 		BBCD16D9555F34FB4841332A /* WineEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = F72E9E612C050188F4EC143E /* WineEngine.swift */; };
+		BCFE15B685D0964E3096016A /* SupportBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1874127CF8C78D801108DAC /* SupportBundle.swift */; };
 		C31D915CADC4BE9D54BE72D6 /* EngineRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA54151AD9A6BDF186510106 /* EngineRegistry.swift */; };
+		C5A1930D9953255D1711D004 /* SupportBundleService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2320A3F5927A013F3F108B52 /* SupportBundleService.swift */; };
+		C8A8B6C1F0F2462A065FE191 /* RuntimeInventory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7107D65D16C62BE9CAB8C3DA /* RuntimeInventory.swift */; };
 		CA18627069DAEBED2AA39921 /* WindowsExecutableScannerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F9A2BF5D71ED18D9D8AA5FE /* WindowsExecutableScannerTests.swift */; };
+		D382736D29DDFCDD4F4E6FFB /* LaunchSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54FB2219A9000B368BAC6BE6 /* LaunchSession.swift */; };
 		D3CDC81CF5B7283F57CCAACA /* LaunchRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31398F75CF52EAAF9FFAB6F6 /* LaunchRequest.swift */; };
+		D4ED11D0DE44B297F3D399DF /* InstallView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB6D932AE9CFDC05DE9642FF /* InstallView.swift */; };
 		D5E926FECD924B0F2FEA87D1 /* BottleRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = D12FDC32870625FFB46F94CF /* BottleRepository.swift */; };
+		D95D967BB62E6D9E074A6538 /* DependencyPlanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE38EE2BD678E3FAFA76B80C /* DependencyPlanner.swift */; };
 		D9960CC540EFB09AAFE38349 /* EngineDescriptor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24092BBAE07A2D3C8312259E /* EngineDescriptor.swift */; };
 		DCD6176B5B564C511D549C21 /* StillCoreError.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5940F1B1F1A59820BE62971 /* StillCoreError.swift */; };
 		DD8F4E2501AAA6282F323387 /* StillCore.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 04D580A7850139A191A3C959 /* StillCore.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		E0C5D518CA4D6074EC64CF70 /* RestorePointService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C8680B9AE12771AA5107433 /* RestorePointService.swift */; };
 		E126944E9A3ADC60FA3BB562 /* EngineInstallerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 956E11FD552E9A25A6F57251 /* EngineInstallerTests.swift */; };
 		E196D53E2663386600FCE9BE /* GraphicsBackend.swift in Sources */ = {isa = PBXBuildFile; fileRef = 006DA5C9B51DE18CB3172AAC /* GraphicsBackend.swift */; };
 		E1C29C298D239673A5C75835 /* EngineRegistryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5DDA6485A9EE1456BF5B263C /* EngineRegistryTests.swift */; };
 		E1E0173AD8DC4D8383E2F562 /* WineProcessController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10EE7BC1502C29E3E2053E82 /* WineProcessController.swift */; };
 		E2754F24041E6BD6B501DA9E /* EngineLocations.swift in Sources */ = {isa = PBXBuildFile; fileRef = 694EAF592DFB74F4D8814E2E /* EngineLocations.swift */; };
 		E9F7423161F32F2CE1D6FC72 /* WindowsApplicationInstaller.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4ABE6B600DD7280EB882658 /* WindowsApplicationInstaller.swift */; };
+		ED16D1B4E8994DC43CB6DAA9 /* SupportBundlePreviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E670D1A8D3B1B86BFC47A35A /* SupportBundlePreviewView.swift */; };
 		F1949554C67A1E1B2F7F543D /* JSONApplicationPinStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 986DA5066A2FDFA5487D4BF3 /* JSONApplicationPinStore.swift */; };
 		F45ECDF4DCE07F83070D49E6 /* WindowsProcess.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CAB5EF0A9F5D6498EE3D6EE /* WindowsProcess.swift */; };
 		FA68167CAB13DEADA1A4AC2A /* StillCore.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 04D580A7850139A191A3C959 /* StillCore.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		FD1E868A96629A4B8A9E7974 /* LogRotationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 568DE663644743DD8BE985D3 /* LogRotationService.swift */; };
 		FEF54FD0B44B6AB4654C5FF4 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 70C070A246D8EB6123B5FB25 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
@@ -106,52 +159,105 @@
 /* Begin PBXFileReference section */
 		006DA5C9B51DE18CB3172AAC /* GraphicsBackend.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GraphicsBackend.swift; sourceTree = "<group>"; };
 		028F179133D5CCB3BC7BD670 /* BottleProvisionerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BottleProvisionerTests.swift; sourceTree = "<group>"; };
+		04C599C356ED1A317486DC30 /* EnvironmentRecoveryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnvironmentRecoveryService.swift; sourceTree = "<group>"; };
 		04D580A7850139A191A3C959 /* StillCore.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = StillCore.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		066C4D80C4609D220FD7944F /* ActivityView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityView.swift; sourceTree = "<group>"; };
+		09D1022DAAB0477B699B751B /* BackupService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupService.swift; sourceTree = "<group>"; };
+		0CAB4EA213588471346F65EB /* DXMTBridgeValidator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DXMTBridgeValidator.swift; sourceTree = "<group>"; };
+		0DFB5CD57920CD094C09CD21 /* Discovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Discovery.swift; sourceTree = "<group>"; };
 		0F9A2BF5D71ED18D9D8AA5FE /* WindowsExecutableScannerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowsExecutableScannerTests.swift; sourceTree = "<group>"; };
 		10EE7BC1502C29E3E2053E82 /* WineProcessController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WineProcessController.swift; sourceTree = "<group>"; };
+		128FE02A9D4B57B811DE7E10 /* Recovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Recovery.swift; sourceTree = "<group>"; };
 		15AA21A04951CA88636F93C6 /* BottleProvisioner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BottleProvisioner.swift; sourceTree = "<group>"; };
 		193593C1E058E2D289F796C2 /* Still.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Still.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		1B3E91F092131B1C5C303C4D /* FileTreeServices.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileTreeServices.swift; sourceTree = "<group>"; };
 		1CAB5EF0A9F5D6498EE3D6EE /* WindowsProcess.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowsProcess.swift; sourceTree = "<group>"; };
+		1F27A98A2906B708CA540286 /* RepairService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RepairService.swift; sourceTree = "<group>"; };
+		2320A3F5927A013F3F108B52 /* SupportBundleService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupportBundleService.swift; sourceTree = "<group>"; };
 		24092BBAE07A2D3C8312259E /* EngineDescriptor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EngineDescriptor.swift; sourceTree = "<group>"; };
+		2847CD8F28CA6F2D7CD664FD /* BundledCompatibilityProfiles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BundledCompatibilityProfiles.swift; sourceTree = "<group>"; };
 		297CC2B02C6FE31D383F4408 /* ValveKeyValueParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ValveKeyValueParser.swift; sourceTree = "<group>"; };
 		2BC4F55CA9FA96602041A234 /* WindowsExecutableScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowsExecutableScanner.swift; sourceTree = "<group>"; };
+		2D887851AF77A914C08FA530 /* EnvironmentOperationCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnvironmentOperationCoordinator.swift; sourceTree = "<group>"; };
 		31398F75CF52EAAF9FFAB6F6 /* LaunchRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchRequest.swift; sourceTree = "<group>"; };
+		39C346E07F8EE6F57A6B926B /* LibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryView.swift; sourceTree = "<group>"; };
+		3F00D4A920651C79335F0BE5 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
+		4162777B334F8A680A4A9067 /* ApplicationDiscoveryCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApplicationDiscoveryCoordinatorTests.swift; sourceTree = "<group>"; };
+		47DB75A30DE08EDE8CC26529 /* AppContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppContainer.swift; sourceTree = "<group>"; };
+		4909447EF1E68FA39D43DA8A /* RecoverySafetyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecoverySafetyTests.swift; sourceTree = "<group>"; };
+		54FB2219A9000B368BAC6BE6 /* LaunchSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchSession.swift; sourceTree = "<group>"; };
+		563C66645802DAD7AD9DA6D1 /* Capability.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Capability.swift; sourceTree = "<group>"; };
+		568DE663644743DD8BE985D3 /* LogRotationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogRotationService.swift; sourceTree = "<group>"; };
 		57828174F87767B29893CB42 /* BundledEngineCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BundledEngineCatalog.swift; sourceTree = "<group>"; };
 		59367E2D537F173E9466514F /* ProcessSupervisor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessSupervisor.swift; sourceTree = "<group>"; };
+		59413BA37A7EF7F22E7835F0 /* StillStoreMigrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StillStoreMigrationTests.swift; sourceTree = "<group>"; };
+		5C8680B9AE12771AA5107433 /* RestorePointService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RestorePointService.swift; sourceTree = "<group>"; };
 		5D59945F0FB95EA3711F3E84 /* SHA256Verifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SHA256Verifier.swift; sourceTree = "<group>"; };
 		5DDA6485A9EE1456BF5B263C /* EngineRegistryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EngineRegistryTests.swift; sourceTree = "<group>"; };
+		5E709BB30A19196F038EDA1C /* Environment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Environment.swift; sourceTree = "<group>"; };
+		5F5CB172947D2BAA9CB54A54 /* ApplicationDiscoveryCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApplicationDiscoveryCoordinator.swift; sourceTree = "<group>"; };
+		68FAEB667CAF74427A956F99 /* ProcessAttributor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessAttributor.swift; sourceTree = "<group>"; };
 		694EAF592DFB74F4D8814E2E /* EngineLocations.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EngineLocations.swift; sourceTree = "<group>"; };
 		6A2C836863F55F6983DD09A8 /* Bottle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Bottle.swift; sourceTree = "<group>"; };
+		6B699A7BD956ACA491391B7B /* DXMTBridgeManifest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DXMTBridgeManifest.swift; sourceTree = "<group>"; };
 		6CF650CE97B7BC3F02E27D7E /* BundledApplicationRecipes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BundledApplicationRecipes.swift; sourceTree = "<group>"; };
-		6D89753043074EAA6715A3FB /* WindowsInstallerDownloader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowsInstallerDownloader.swift; sourceTree = "<group>"; };
 		6F42F62BE4405785E33DA848 /* WineCommandBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WineCommandBuilder.swift; sourceTree = "<group>"; };
+		6F6247D32F050DDD7130E30E /* DiscoveryReviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoveryReviewView.swift; sourceTree = "<group>"; };
 		70C070A246D8EB6123B5FB25 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		7107D65D16C62BE9CAB8C3DA /* RuntimeInventory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimeInventory.swift; sourceTree = "<group>"; };
+		74DA2C359E9C45C03F870BE9 /* StillStoreDocument.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StillStoreDocument.swift; sourceTree = "<group>"; };
+		79660805A836A3AE804666D8 /* StillCommands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StillCommands.swift; sourceTree = "<group>"; };
+		7A4D039E843D38939E7A34C4 /* JSONStillStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JSONStillStore.swift; sourceTree = "<group>"; };
+		7BA7610F1F246F629DDE079E /* CompatibilityFoundationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompatibilityFoundationTests.swift; sourceTree = "<group>"; };
 		7E655A331D6FF2F02D28DFF1 /* ValveKeyValueParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ValveKeyValueParserTests.swift; sourceTree = "<group>"; };
 		82E967664122B023E75781E1 /* StillDesktopApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StillDesktopApp.swift; sourceTree = "<group>"; };
 		8575F035ACB94B25EAB1036E /* LocalWineEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalWineEngine.swift; sourceTree = "<group>"; };
 		88D606D40F75A8CBB52F264A /* ProcessPlan.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessPlan.swift; sourceTree = "<group>"; };
 		8A796481567BE9CD09570049 /* InstalledWindowsApplication.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstalledWindowsApplication.swift; sourceTree = "<group>"; };
+		8BE16FAD9B6C2646B361A35E /* ApplicationInspector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApplicationInspector.swift; sourceTree = "<group>"; };
+		8C521089E24C42ABA890A595 /* DeveloperView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeveloperView.swift; sourceTree = "<group>"; };
 		8C95F7221EE83F1953902225 /* JSONBottleStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JSONBottleStore.swift; sourceTree = "<group>"; };
+		8F226E7B0AA09DD7D6A88A82 /* CapabilityRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CapabilityRegistry.swift; sourceTree = "<group>"; };
 		930FC14E6420A2BB5C9C9843 /* SteamBootstrapper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SteamBootstrapper.swift; sourceTree = "<group>"; };
 		956E11FD552E9A25A6F57251 /* EngineInstallerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EngineInstallerTests.swift; sourceTree = "<group>"; };
+		96288B92CC46337E386A61A0 /* TerminationCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminationCoordinator.swift; sourceTree = "<group>"; };
 		986DA5066A2FDFA5487D4BF3 /* JSONApplicationPinStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JSONApplicationPinStore.swift; sourceTree = "<group>"; };
 		9EE0023B93193FD4A719EF5E /* SteamLibraryScannerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SteamLibraryScannerTests.swift; sourceTree = "<group>"; };
+		A0490D61AF284E5C72C24F8D /* StableID.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StableID.swift; sourceTree = "<group>"; };
+		A0D082EB02B2E3825A3DFBE1 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		A1874127CF8C78D801108DAC /* SupportBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupportBundle.swift; sourceTree = "<group>"; };
+		A43AEAC209ECA7E1105F93E6 /* CompatibilityResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompatibilityResolver.swift; sourceTree = "<group>"; };
 		A6038FF4C1E066D257E255DF /* EngineInstaller.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EngineInstaller.swift; sourceTree = "<group>"; };
 		A6259F0F9FC83FEAD78EE79D /* ApplicationRecipeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApplicationRecipeTests.swift; sourceTree = "<group>"; };
+		A7FE82F6B7835000204F38D9 /* FeatureStateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeatureStateView.swift; sourceTree = "<group>"; };
+		A90C642B70DB7601AA160A16 /* StillStoreMigrator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StillStoreMigrator.swift; sourceTree = "<group>"; };
 		ADB8934289AF933ED86C6A07 /* EngineManifest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EngineManifest.swift; sourceTree = "<group>"; };
+		B00E04CE193BAFDACCDD44BC /* CompatibilityProfile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompatibilityProfile.swift; sourceTree = "<group>"; };
+		B2AAF8FD98234CDC4820E04B /* DXMTBridgeValidatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DXMTBridgeValidatorTests.swift; sourceTree = "<group>"; };
 		B6C0115CCA65491CA4522962 /* SteamLibraryScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SteamLibraryScanner.swift; sourceTree = "<group>"; };
 		B80270DE89381BF90EC70E1D /* JSONBottleStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JSONBottleStoreTests.swift; sourceTree = "<group>"; };
 		B8186451672745A7EE64D345 /* WindowsApplicationRecipe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowsApplicationRecipe.swift; sourceTree = "<group>"; };
+		BB6D932AE9CFDC05DE9642FF /* InstallView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstallView.swift; sourceTree = "<group>"; };
+		BBD22D67E34E7F76C7D548E4 /* SidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarView.swift; sourceTree = "<group>"; };
+		C00E034B48823303EA71DC8D /* EnvironmentsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnvironmentsView.swift; sourceTree = "<group>"; };
 		C1B66EB6D90CECF701CAD7ED /* StillCoreTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = StillCoreTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		C7480CFE9ED2C36424381012 /* LibraryApplication.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryApplication.swift; sourceTree = "<group>"; };
 		CCA9EA7D3D18E5DA39A979BC /* WineProcessTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WineProcessTests.swift; sourceTree = "<group>"; };
+		CE2DE7099A2810030CABAE9B /* OperationLaunchSessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OperationLaunchSessionTests.swift; sourceTree = "<group>"; };
 		D12FDC32870625FFB46F94CF /* BottleRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BottleRepository.swift; sourceTree = "<group>"; };
 		D5940F1B1F1A59820BE62971 /* StillCoreError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StillCoreError.swift; sourceTree = "<group>"; };
 		DCD8061811699BD8330516B5 /* ApplicationLibraryScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApplicationLibraryScanner.swift; sourceTree = "<group>"; };
 		E25C40F47438C736FA1E4C30 /* WindowsProcessListParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowsProcessListParserTests.swift; sourceTree = "<group>"; };
 		E4ABE6B600DD7280EB882658 /* WindowsApplicationInstaller.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowsApplicationInstaller.swift; sourceTree = "<group>"; };
+		E670D1A8D3B1B86BFC47A35A /* SupportBundlePreviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupportBundlePreviewView.swift; sourceTree = "<group>"; };
 		EA309E592274888F85711621 /* JSONApplicationPinStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JSONApplicationPinStoreTests.swift; sourceTree = "<group>"; };
+		EE38EE2BD678E3FAFA76B80C /* DependencyPlanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DependencyPlanner.swift; sourceTree = "<group>"; };
+		EF8C2CBC05E8060273FD0B0B /* ApplicationLifecycle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApplicationLifecycle.swift; sourceTree = "<group>"; };
+		F0ADA425C886A3002D15DD0D /* SupportBundleServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupportBundleServiceTests.swift; sourceTree = "<group>"; };
 		F3C1C2F6C2B3A02784947BB1 /* TarXZArchiveExtractor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TarXZArchiveExtractor.swift; sourceTree = "<group>"; };
+		F456F04AE6B84288B81D462A /* Operation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Operation.swift; sourceTree = "<group>"; };
 		F72E9E612C050188F4EC143E /* WineEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WineEngine.swift; sourceTree = "<group>"; };
+		F78C5DDB3DB57C5FA00CD8DD /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
 		FA41447ACB35E8B3F2DA6B4F /* ProductIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProductIdentity.swift; sourceTree = "<group>"; };
 		FA54151AD9A6BDF186510106 /* EngineRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EngineRegistry.swift; sourceTree = "<group>"; };
 		FA8702E1886D5E5B6A1FDA86 /* LogLocations.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogLocations.swift; sourceTree = "<group>"; };
@@ -190,13 +296,25 @@
 			isa = PBXGroup;
 			children = (
 				6A2C836863F55F6983DD09A8 /* Bottle.swift */,
+				563C66645802DAD7AD9DA6D1 /* Capability.swift */,
+				B00E04CE193BAFDACCDD44BC /* CompatibilityProfile.swift */,
+				0DFB5CD57920CD094C09CD21 /* Discovery.swift */,
+				6B699A7BD956ACA491391B7B /* DXMTBridgeManifest.swift */,
 				24092BBAE07A2D3C8312259E /* EngineDescriptor.swift */,
 				ADB8934289AF933ED86C6A07 /* EngineManifest.swift */,
+				5E709BB30A19196F038EDA1C /* Environment.swift */,
 				006DA5C9B51DE18CB3172AAC /* GraphicsBackend.swift */,
 				8A796481567BE9CD09570049 /* InstalledWindowsApplication.swift */,
 				31398F75CF52EAAF9FFAB6F6 /* LaunchRequest.swift */,
+				54FB2219A9000B368BAC6BE6 /* LaunchSession.swift */,
+				C7480CFE9ED2C36424381012 /* LibraryApplication.swift */,
+				F456F04AE6B84288B81D462A /* Operation.swift */,
 				88D606D40F75A8CBB52F264A /* ProcessPlan.swift */,
 				FA41447ACB35E8B3F2DA6B4F /* ProductIdentity.swift */,
+				128FE02A9D4B57B811DE7E10 /* Recovery.swift */,
+				7107D65D16C62BE9CAB8C3DA /* RuntimeInventory.swift */,
+				A0490D61AF284E5C72C24F8D /* StableID.swift */,
+				A1874127CF8C78D801108DAC /* SupportBundle.swift */,
 				B8186451672745A7EE64D345 /* WindowsApplicationRecipe.swift */,
 				1CAB5EF0A9F5D6498EE3D6EE /* WindowsProcess.swift */,
 			);
@@ -214,27 +332,45 @@
 		1B8C3BE7D9B4C1E0E6367D62 /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				5F5CB172947D2BAA9CB54A54 /* ApplicationDiscoveryCoordinator.swift */,
 				DCD8061811699BD8330516B5 /* ApplicationLibraryScanner.swift */,
+				09D1022DAAB0477B699B751B /* BackupService.swift */,
 				15AA21A04951CA88636F93C6 /* BottleProvisioner.swift */,
 				6CF650CE97B7BC3F02E27D7E /* BundledApplicationRecipes.swift */,
+				2847CD8F28CA6F2D7CD664FD /* BundledCompatibilityProfiles.swift */,
 				57828174F87767B29893CB42 /* BundledEngineCatalog.swift */,
+				8F226E7B0AA09DD7D6A88A82 /* CapabilityRegistry.swift */,
+				A43AEAC209ECA7E1105F93E6 /* CompatibilityResolver.swift */,
+				EE38EE2BD678E3FAFA76B80C /* DependencyPlanner.swift */,
+				0CAB4EA213588471346F65EB /* DXMTBridgeValidator.swift */,
 				A6038FF4C1E066D257E255DF /* EngineInstaller.swift */,
 				694EAF592DFB74F4D8814E2E /* EngineLocations.swift */,
 				FA54151AD9A6BDF186510106 /* EngineRegistry.swift */,
+				2D887851AF77A914C08FA530 /* EnvironmentOperationCoordinator.swift */,
+				04C599C356ED1A317486DC30 /* EnvironmentRecoveryService.swift */,
+				1B3E91F092131B1C5C303C4D /* FileTreeServices.swift */,
 				986DA5066A2FDFA5487D4BF3 /* JSONApplicationPinStore.swift */,
 				8C95F7221EE83F1953902225 /* JSONBottleStore.swift */,
+				7A4D039E843D38939E7A34C4 /* JSONStillStore.swift */,
 				8575F035ACB94B25EAB1036E /* LocalWineEngine.swift */,
 				FA8702E1886D5E5B6A1FDA86 /* LogLocations.swift */,
+				568DE663644743DD8BE985D3 /* LogRotationService.swift */,
+				68FAEB667CAF74427A956F99 /* ProcessAttributor.swift */,
 				59367E2D537F173E9466514F /* ProcessSupervisor.swift */,
+				1F27A98A2906B708CA540286 /* RepairService.swift */,
+				5C8680B9AE12771AA5107433 /* RestorePointService.swift */,
 				5D59945F0FB95EA3711F3E84 /* SHA256Verifier.swift */,
 				930FC14E6420A2BB5C9C9843 /* SteamBootstrapper.swift */,
 				B6C0115CCA65491CA4522962 /* SteamLibraryScanner.swift */,
 				D5940F1B1F1A59820BE62971 /* StillCoreError.swift */,
+				74DA2C359E9C45C03F870BE9 /* StillStoreDocument.swift */,
+				A90C642B70DB7601AA160A16 /* StillStoreMigrator.swift */,
+				2320A3F5927A013F3F108B52 /* SupportBundleService.swift */,
 				F3C1C2F6C2B3A02784947BB1 /* TarXZArchiveExtractor.swift */,
+				96288B92CC46337E386A61A0 /* TerminationCoordinator.swift */,
 				297CC2B02C6FE31D383F4408 /* ValveKeyValueParser.swift */,
 				E4ABE6B600DD7280EB882658 /* WindowsApplicationInstaller.swift */,
 				2BC4F55CA9FA96602041A234 /* WindowsExecutableScanner.swift */,
-				6D89753043074EAA6715A3FB /* WindowsInstallerDownloader.swift */,
 				6F42F62BE4405785E33DA848 /* WineCommandBuilder.swift */,
 				10EE7BC1502C29E3E2053E82 /* WineProcessController.swift */,
 			);
@@ -244,13 +380,20 @@
 		4C6F515C531DAABEDA99F4D7 /* StillCoreTests */ = {
 			isa = PBXGroup;
 			children = (
+				4162777B334F8A680A4A9067 /* ApplicationDiscoveryCoordinatorTests.swift */,
 				A6259F0F9FC83FEAD78EE79D /* ApplicationRecipeTests.swift */,
 				028F179133D5CCB3BC7BD670 /* BottleProvisionerTests.swift */,
+				7BA7610F1F246F629DDE079E /* CompatibilityFoundationTests.swift */,
+				B2AAF8FD98234CDC4820E04B /* DXMTBridgeValidatorTests.swift */,
 				956E11FD552E9A25A6F57251 /* EngineInstallerTests.swift */,
 				5DDA6485A9EE1456BF5B263C /* EngineRegistryTests.swift */,
 				EA309E592274888F85711621 /* JSONApplicationPinStoreTests.swift */,
 				B80270DE89381BF90EC70E1D /* JSONBottleStoreTests.swift */,
+				CE2DE7099A2810030CABAE9B /* OperationLaunchSessionTests.swift */,
+				4909447EF1E68FA39D43DA8A /* RecoverySafetyTests.swift */,
 				9EE0023B93193FD4A719EF5E /* SteamLibraryScannerTests.swift */,
+				59413BA37A7EF7F22E7835F0 /* StillStoreMigrationTests.swift */,
+				F0ADA425C886A3002D15DD0D /* SupportBundleServiceTests.swift */,
 				7E655A331D6FF2F02D28DFF1 /* ValveKeyValueParserTests.swift */,
 				0F9A2BF5D71ED18D9D8AA5FE /* WindowsExecutableScannerTests.swift */,
 				E25C40F47438C736FA1E4C30 /* WindowsProcessListParserTests.swift */,
@@ -281,8 +424,24 @@
 		BB553F0D5485E9D9944E90CB /* StillDesktop */ = {
 			isa = PBXGroup;
 			children = (
+				066C4D80C4609D220FD7944F /* ActivityView.swift */,
+				47DB75A30DE08EDE8CC26529 /* AppContainer.swift */,
+				8BE16FAD9B6C2646B361A35E /* ApplicationInspector.swift */,
+				EF8C2CBC05E8060273FD0B0B /* ApplicationLifecycle.swift */,
+				3F00D4A920651C79335F0BE5 /* AppModel.swift */,
+				F78C5DDB3DB57C5FA00CD8DD /* AppState.swift */,
 				70C070A246D8EB6123B5FB25 /* Assets.xcassets */,
+				8C521089E24C42ABA890A595 /* DeveloperView.swift */,
+				6F6247D32F050DDD7130E30E /* DiscoveryReviewView.swift */,
+				C00E034B48823303EA71DC8D /* EnvironmentsView.swift */,
+				A7FE82F6B7835000204F38D9 /* FeatureStateView.swift */,
+				BB6D932AE9CFDC05DE9642FF /* InstallView.swift */,
+				39C346E07F8EE6F57A6B926B /* LibraryView.swift */,
+				A0D082EB02B2E3825A3DFBE1 /* SettingsView.swift */,
+				BBD22D67E34E7F76C7D548E4 /* SidebarView.swift */,
+				79660805A836A3AE804666D8 /* StillCommands.swift */,
 				82E967664122B023E75781E1 /* StillDesktopApp.swift */,
+				E670D1A8D3B1B86BFC47A35A /* SupportBundlePreviewView.swift */,
 			);
 			path = StillDesktop;
 			sourceTree = "<group>";
@@ -418,7 +577,23 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A655934AE3EAA33817333F97 /* ActivityView.swift in Sources */,
+				58DB51579D737E0C0970AE86 /* AppContainer.swift in Sources */,
+				13D98F60A5D4E4ABF92439E2 /* AppModel.swift in Sources */,
+				12704BB792761382BC414427 /* AppState.swift in Sources */,
+				599001346002DD82307789D0 /* ApplicationInspector.swift in Sources */,
+				9BAFF870A081C03A518781DE /* ApplicationLifecycle.swift in Sources */,
+				A7A6ADE396DCFDDAA80CC753 /* DeveloperView.swift in Sources */,
+				16735A23A772B78FB215539C /* DiscoveryReviewView.swift in Sources */,
+				8E6D10C456920D3D0557A5D8 /* EnvironmentsView.swift in Sources */,
+				B6EAE08476B34191EFBDDB1B /* FeatureStateView.swift in Sources */,
+				D4ED11D0DE44B297F3D399DF /* InstallView.swift in Sources */,
+				8BE7FEAD77A90EC6C889A0C0 /* LibraryView.swift in Sources */,
+				B84D99197B467211AC9C59B2 /* SettingsView.swift in Sources */,
+				0214BB76358E9A19605D82A0 /* SidebarView.swift in Sources */,
+				AB2F9306B7FD1C03772497C6 /* StillCommands.swift in Sources */,
 				798C245DBFA5A4C62DFF4D3C /* StillDesktopApp.swift in Sources */,
+				ED16D1B4E8994DC43CB6DAA9 /* SupportBundlePreviewView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -426,13 +601,20 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				1E375394FD56C7BFC04690C1 /* ApplicationDiscoveryCoordinatorTests.swift in Sources */,
 				ABDE7B520ECA1B78A9D051E6 /* ApplicationRecipeTests.swift in Sources */,
 				94FBC729860598CD20C924D0 /* BottleProvisionerTests.swift in Sources */,
+				460A8C4CB78B70D6CAFD9AEC /* CompatibilityFoundationTests.swift in Sources */,
+				13BB13C8ABBBE25E14854CE7 /* DXMTBridgeValidatorTests.swift in Sources */,
 				E126944E9A3ADC60FA3BB562 /* EngineInstallerTests.swift in Sources */,
 				E1C29C298D239673A5C75835 /* EngineRegistryTests.swift in Sources */,
 				6ECCD45212A69BEF5430CE11 /* JSONApplicationPinStoreTests.swift in Sources */,
 				616B5B4F6DF428E9EABAED3B /* JSONBottleStoreTests.swift in Sources */,
+				351E3341950E33977F6953DB /* OperationLaunchSessionTests.swift in Sources */,
+				044EA7B07EABD7600485A0FF /* RecoverySafetyTests.swift in Sources */,
 				30713452A859978AD99EC4BD /* SteamLibraryScannerTests.swift in Sources */,
+				1DA5CFF9E4C8C35C64E2A17D /* StillStoreMigrationTests.swift in Sources */,
+				0CB5DC78D6976F36CDC407E6 /* SupportBundleServiceTests.swift in Sources */,
 				6DBF20783C96DDAA77EB71AC /* ValveKeyValueParserTests.swift in Sources */,
 				CA18627069DAEBED2AA39921 /* WindowsExecutableScannerTests.swift in Sources */,
 				1343D9CA2E07E25888288AEB /* WindowsProcessListParserTests.swift in Sources */,
@@ -444,37 +626,67 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				84BBADEE78DE4F5557C72F11 /* ApplicationDiscoveryCoordinator.swift in Sources */,
 				5DEC1A787F876D7DBB999EB5 /* ApplicationLibraryScanner.swift in Sources */,
+				07C871467D3C55923F838E56 /* BackupService.swift in Sources */,
 				A4D41498B0C684A7A8C0572F /* Bottle.swift in Sources */,
 				20AC86F567D9D7F42F7DA712 /* BottleProvisioner.swift in Sources */,
 				D5E926FECD924B0F2FEA87D1 /* BottleRepository.swift in Sources */,
 				0977AFA93BF94889A7086825 /* BundledApplicationRecipes.swift in Sources */,
+				3BEBD434FFF4C063C5864909 /* BundledCompatibilityProfiles.swift in Sources */,
 				19A6DB2B1650F81E4D43D857 /* BundledEngineCatalog.swift in Sources */,
+				B23273499E334B0549A4DFBB /* Capability.swift in Sources */,
+				5E612AFA431EB6ED21BEB883 /* CapabilityRegistry.swift in Sources */,
+				921691B1BC7FB74CDEA4A274 /* CompatibilityProfile.swift in Sources */,
+				4403E09329C6F809D844A422 /* CompatibilityResolver.swift in Sources */,
+				B5816C8C3A7D5DD0F263F59B /* DXMTBridgeManifest.swift in Sources */,
+				A82BC29C0A37EC0C2DA33B1A /* DXMTBridgeValidator.swift in Sources */,
+				D95D967BB62E6D9E074A6538 /* DependencyPlanner.swift in Sources */,
+				1F9770B68B12D9EB8D61E19F /* Discovery.swift in Sources */,
 				D9960CC540EFB09AAFE38349 /* EngineDescriptor.swift in Sources */,
 				67EDA103792A74378B58740D /* EngineInstaller.swift in Sources */,
 				E2754F24041E6BD6B501DA9E /* EngineLocations.swift in Sources */,
 				191E444227F05C0FB836791D /* EngineManifest.swift in Sources */,
 				C31D915CADC4BE9D54BE72D6 /* EngineRegistry.swift in Sources */,
+				07D85B8A819FAA0F4C67C25A /* Environment.swift in Sources */,
+				0C0FBE116AF58DE34736F49B /* EnvironmentOperationCoordinator.swift in Sources */,
+				9B858DB6BACAFC6BB59A98E1 /* EnvironmentRecoveryService.swift in Sources */,
+				87042FC9102CD3EE92356E8E /* FileTreeServices.swift in Sources */,
 				E196D53E2663386600FCE9BE /* GraphicsBackend.swift in Sources */,
 				1F841839337C696A4F5E553F /* InstalledWindowsApplication.swift in Sources */,
 				F1949554C67A1E1B2F7F543D /* JSONApplicationPinStore.swift in Sources */,
 				150A64A33F2ABFACA54D2E54 /* JSONBottleStore.swift in Sources */,
+				0273FD8A5CFB5752325CD6D3 /* JSONStillStore.swift in Sources */,
 				D3CDC81CF5B7283F57CCAACA /* LaunchRequest.swift in Sources */,
+				D382736D29DDFCDD4F4E6FFB /* LaunchSession.swift in Sources */,
+				2F528F5BC0B375545F86CC22 /* LibraryApplication.swift in Sources */,
 				3C9372B99C6F5694D84A4BF4 /* LocalWineEngine.swift in Sources */,
 				B7A9D624F0989DD584E218CA /* LogLocations.swift in Sources */,
+				FD1E868A96629A4B8A9E7974 /* LogRotationService.swift in Sources */,
+				A21BAD240D0113486038828E /* Operation.swift in Sources */,
+				89F1021F4AE3805EFF194BCF /* ProcessAttributor.swift in Sources */,
 				4683FF2CF1FE80DFD48A53B4 /* ProcessPlan.swift in Sources */,
 				647BBEDC388F3CB07E937EEF /* ProcessSupervisor.swift in Sources */,
 				0B6204C21E8AE6822DF8DF73 /* ProductIdentity.swift in Sources */,
+				3B01822384244BF863798D34 /* Recovery.swift in Sources */,
+				0EAA10F75C7B73D78F1FEADE /* RepairService.swift in Sources */,
+				E0C5D518CA4D6074EC64CF70 /* RestorePointService.swift in Sources */,
+				C8A8B6C1F0F2462A065FE191 /* RuntimeInventory.swift in Sources */,
 				B5274A23652E8D02A0F92F94 /* SHA256Verifier.swift in Sources */,
+				4C56298D927516885FBF5A08 /* StableID.swift in Sources */,
 				02839A39F990E35CBAA362ED /* SteamBootstrapper.swift in Sources */,
 				31270FA665B7393358BD5F7B /* SteamLibraryScanner.swift in Sources */,
 				DCD6176B5B564C511D549C21 /* StillCoreError.swift in Sources */,
+				4827D972203CA1B51D772512 /* StillStoreDocument.swift in Sources */,
+				056A2BF13BA3E75F533CA5A0 /* StillStoreMigrator.swift in Sources */,
+				BCFE15B685D0964E3096016A /* SupportBundle.swift in Sources */,
+				C5A1930D9953255D1711D004 /* SupportBundleService.swift in Sources */,
 				2B3F7A0185102AD8A03D6BBE /* TarXZArchiveExtractor.swift in Sources */,
+				9B2289FD2BE0F2DAFFB4A0AC /* TerminationCoordinator.swift in Sources */,
 				8D8609F7D023947F5EDFC08A /* ValveKeyValueParser.swift in Sources */,
 				E9F7423161F32F2CE1D6FC72 /* WindowsApplicationInstaller.swift in Sources */,
 				2465025DF4F046EEAED50F23 /* WindowsApplicationRecipe.swift in Sources */,
 				B92F944488218B31DE241B22 /* WindowsExecutableScanner.swift in Sources */,
-				4DD965E2D004272A113FE472 /* WindowsInstallerDownloader.swift in Sources */,
 				F45ECDF4DCE07F83070D49E6 /* WindowsProcess.swift in Sources */,
 				70B768295BBA5C1F51DA918C /* WineCommandBuilder.swift in Sources */,
 				BBCD16D9555F34FB4841332A /* WineEngine.swift in Sources */,
