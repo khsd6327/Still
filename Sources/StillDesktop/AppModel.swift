@@ -7,7 +7,6 @@ import UniformTypeIdentifiers
 private enum StabilizationGate {
     static let physicalEnvironmentDeletionEnabled = true
     static let restoreEnabled = false
-    static let encryptedBackupEnabled = false
 }
 
 @MainActor
@@ -728,10 +727,6 @@ final class AppModel: ObservableObject {
         encrypted: Bool,
         password: String?
     ) async {
-        guard !encrypted || StabilizationGate.encryptedBackupEnabled else {
-            errorMessage = "Encrypted backup is temporarily unavailable while its password protection is being upgraded."
-            return
-        }
         var operation = StillOperation(kind: .backup, environmentID: environment.id)
         do {
             try operation.transition(to: .running)

@@ -57,7 +57,8 @@ reached by each tested configuration.
 See [Compatibility](Documentation/Compatibility.md) and
 [Engines](Documentation/Engines.md) for supported configuration boundaries.
 Validated application results are recorded in
-[Compatibility results](Documentation/Compatibility-Results.md).
+[Compatibility results](Documentation/Compatibility-Results.md). Backup scope
+and format details are documented in [Backups](Documentation/Backups.md).
 
 ## Development
 

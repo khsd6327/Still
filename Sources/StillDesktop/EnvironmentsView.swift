@@ -259,6 +259,7 @@ private struct BackupExportView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var encrypted = false
     @State private var password = ""
+    @State private var passwordConfirmation = ""
 
     var body: some View {
         Form {
@@ -269,14 +270,20 @@ private struct BackupExportView: View {
             }
             Section("Protection") {
                 Toggle("Encrypt with a password", isOn: $encrypted)
-                    .disabled(true)
                 if encrypted {
                     SecureField("Backup password", text: $password)
+                    SecureField(
+                        "Confirm backup password",
+                        text: $passwordConfirmation
+                    )
                     Text("This password cannot be recovered by Still.")
                         .font(.caption).foregroundStyle(.secondary)
+                    if !passwordConfirmation.isEmpty,
+                       password != passwordConfirmation {
+                        Text("The passwords do not match.")
+                            .font(.caption).foregroundStyle(.red)
+                    }
                 }
-                Text("Password protection is temporarily unavailable while its key derivation is being upgraded.")
-                    .font(.caption).foregroundStyle(.secondary)
             }
             Section {
                 HStack {
@@ -284,7 +291,10 @@ private struct BackupExportView: View {
                     Spacer()
                     Button("Choose Destination…") { chooseDestination() }
                         .buttonStyle(.borderedProminent)
-                        .disabled(encrypted && password.isEmpty)
+                        .disabled(
+                            encrypted
+                                && (password.isEmpty || password != passwordConfirmation)
+                        )
                 }
             }
         }
@@ -294,8 +304,8 @@ private struct BackupExportView: View {
 
     private func chooseDestination() {
         let panel = NSSavePanel()
-        panel.title = "Export Experimental Partial Data"
-        panel.nameFieldStringValue = "\(environment.name).stillpartial"
+        panel.title = "Export Still Backup"
+        panel.nameFieldStringValue = "\(environment.name).stillbackup"
         guard panel.runModal() == .OK, let url = panel.url else { return }
         dismiss()
         Task {
