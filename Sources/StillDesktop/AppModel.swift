@@ -796,6 +796,13 @@ final class AppModel: ObservableObject {
         }
     }
 
+    func inspectBackup(at backupURL: URL, password: String?) async throws -> BackupManifest {
+        try await backupService.inspectBackup(
+            at: backupURL,
+            password: password?.isEmpty == true ? nil : password
+        )
+    }
+
     func requestEnvironmentRemoval(_ environment: WindowsEnvironment) {
         pendingEnvironmentRemoval = environment
     }

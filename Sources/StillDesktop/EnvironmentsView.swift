@@ -184,6 +184,9 @@ private struct BackupRestoreView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var backupURL: URL?
     @State private var password = ""
+    @State private var manifest: BackupManifest?
+    @State private var inspectionError: String?
+    @State private var isInspecting = false
 
     var body: some View {
         Form {
@@ -196,22 +199,86 @@ private struct BackupRestoreView: View {
                 Text("Encrypted backups cannot be inspected or restored without the correct password.")
                     .font(.caption).foregroundStyle(.secondary)
             }
+            if let manifest {
+                Section("Restore Preview") {
+                    LabeledContent("Environment", value: manifest.environment.name)
+                    LabeledContent(
+                        "Applications",
+                        value: "\(manifest.snapshot.applications.count)"
+                    )
+                    LabeledContent("Files", value: "\(manifest.fileCount)")
+                    LabeledContent(
+                        "Data",
+                        value: ByteCountFormatter.string(
+                            fromByteCount: manifest.byteCount,
+                            countStyle: .file
+                        )
+                    )
+                    LabeledContent(
+                        "Engine",
+                        value: manifest.requiredEngineBuildID ?? "No pinned engine"
+                    )
+                    LabeledContent(
+                        "Components",
+                        value: "\(manifest.requiredComponents.count)"
+                    )
+                    ForEach(
+                        manifest.snapshot.applications.sorted {
+                            $0.name.localizedStandardCompare($1.name) == .orderedAscending
+                        }
+                    ) { application in
+                        Label(application.name, systemImage: application.category == .game
+                            ? "gamecontroller"
+                            : "app")
+                    }
+                    ForEach(manifest.requiredComponents.keys.sorted(), id: \.self) { id in
+                        LabeledContent(id, value: manifest.requiredComponents[id] ?? "")
+                    }
+                    Text("Restore creates a new managed Environment and leaves existing Environments unchanged.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            if let inspectionError {
+                Section {
+                    Label(inspectionError, systemImage: "exclamationmark.triangle")
+                        .foregroundStyle(.red)
+                }
+            }
             Section {
                 HStack {
                     Button("Cancel") { dismiss() }
                     Spacer()
-                    Button("Restore") {
-                        guard let backupURL else { return }
-                        dismiss()
-                        Task { await model.restoreBackup(at: backupURL, password: password) }
+                    if manifest == nil {
+                        Button("Preview") {
+                            Task { await inspectBackup() }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(backupURL == nil || isInspecting)
+                    } else {
+                        Button("Restore") {
+                            guard let backupURL else { return }
+                            dismiss()
+                            Task {
+                                await model.restoreBackup(
+                                    at: backupURL,
+                                    password: password
+                                )
+                            }
+                        }
+                        .buttonStyle(.borderedProminent)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(backupURL == nil)
+                    if isInspecting {
+                        ProgressView().controlSize(.small)
+                    }
                 }
             }
         }
         .formStyle(.grouped)
-        .frame(width: 560, height: 330)
+        .frame(minWidth: 580, maxWidth: 580, minHeight: 360, maxHeight: 680)
+        .onChange(of: password) {
+            manifest = nil
+            inspectionError = nil
+        }
     }
 
     private func chooseBackup() {
@@ -221,6 +288,24 @@ private struct BackupRestoreView: View {
         panel.canChooseDirectories = false
         guard panel.runModal() == .OK else { return }
         backupURL = panel.url
+        manifest = nil
+        inspectionError = nil
+    }
+
+    private func inspectBackup() async {
+        guard let backupURL else { return }
+        isInspecting = true
+        inspectionError = nil
+        defer { isInspecting = false }
+        do {
+            manifest = try await model.inspectBackup(
+                at: backupURL,
+                password: password
+            )
+        } catch {
+            manifest = nil
+            inspectionError = error.localizedDescription
+        }
     }
 }
 
