@@ -104,13 +104,15 @@ struct LibraryView: View {
     }
 
     private var emptyTitle: String {
-        model.searchText.isEmpty ? "No Applications" : "No Results"
+        guard model.searchText.isEmpty else { return "No Results" }
+        return model.environments.isEmpty ? "No Environments" : "No Applications Found"
     }
 
     private var emptyDescription: String {
-        model.searchText.isEmpty
-            ? "Choose a local installer or scan an existing Environment."
-            : "Try a different search."
+        guard model.searchText.isEmpty else { return "Try a different search." }
+        return model.environments.isEmpty
+            ? "Create an Environment or import an existing Wine prefix."
+            : "Install a Windows application or scan the registered Environments again."
     }
 
     private func icon(for application: LibraryApplication) -> String {

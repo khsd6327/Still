@@ -71,6 +71,24 @@ final class ApplicationDiscoveryCoordinatorTests: XCTestCase {
         XCTAssertEqual(result.accepted.first(where: { $0.application.name == "Test Game" })?.providerManagedState, .installed)
     }
 
+    func testSteamClientIsDiscoveredWithoutSteamAppsDirectory() throws {
+        let prefix = FileManager.default.temporaryDirectory
+            .appending(path: "StillSteamClientDiscovery-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: prefix) }
+        let steam = prefix.appending(path: "drive_c/Program Files (x86)/Steam")
+        try FileManager.default.createDirectory(at: steam, withIntermediateDirectories: true)
+        try Data("MZ".utf8).write(to: steam.appending(path: "steam.exe"))
+
+        let result = ApplicationDiscoveryCoordinator(
+            providers: [SteamDiscoveryProvider()]
+        ).discover(in: Bottle(name: "Steam", prefixURL: prefix))
+
+        XCTAssertEqual(result.accepted.map(\.application.name), ["Steam"])
+        XCTAssertEqual(result.accepted.first?.category, .launcher)
+        XCTAssertTrue(result.requiresConfirmation.isEmpty)
+        XCTAssertTrue(result.providerFailures.isEmpty)
+    }
+
     private func candidate(
         name: String,
         path: URL,

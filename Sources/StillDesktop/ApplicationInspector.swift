@@ -47,7 +47,7 @@ struct ApplicationInspector: View {
                 }
                 Section("Files") {
                     if let entry = primaryEntry(application) {
-                        Text(entry.executableURL.path)
+                        Text(displayPath(entry.executableURL, for: application))
                             .font(.caption.monospaced())
                             .textSelection(.enabled)
                             .lineLimit(3)
@@ -88,5 +88,20 @@ struct ApplicationInspector: View {
         case .needsUpdate: "Update Required"
         case .unknown: "Unknown"
         }
+    }
+
+    private func displayPath(_ executableURL: URL, for application: LibraryApplication) -> String {
+        guard let environment = model.environments.first(where: { $0.id == application.environmentID }) else {
+            return executableURL.lastPathComponent
+        }
+
+        let driveRoot = environment.prefixURL.appending(path: "drive_c").standardizedFileURL.path
+        let executablePath = executableURL.standardizedFileURL.path
+        guard executablePath.hasPrefix(driveRoot + "/") else {
+            return executableURL.lastPathComponent
+        }
+
+        let relativePath = executablePath.dropFirst(driveRoot.count + 1)
+        return "C:\\" + relativePath.replacingOccurrences(of: "/", with: "\\")
     }
 }

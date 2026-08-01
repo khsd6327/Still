@@ -172,25 +172,38 @@ final class AppModel: ObservableObject {
         return values
     }
 
-    func load() async {
+    func load(scanRegisteredEnvironments: Bool = true) async {
         libraryState = .loading
         activityState = .loading
         do {
             _ = try logRotationService.rotate(retentionDays: logRetentionDays)
             _ = try await store.recoverInterruptedOperations()
-            let document = try await store.load()
+            var document = try await store.load()
             environments = document.environments
             applications = document.applications
             launchEntries = document.launchEntries
             operations = document.operations.sorted { $0.createdAt > $1.createdAt }
             installedEngines = await engineInstaller.installedDescriptors()
+            var discoveryFailureCount = 0
+            if scanRegisteredEnvironments, !environments.isEmpty {
+                let summary = await discoverApplications(environmentID: nil)
+                discoveryFailureCount = summary.failureCount
+                pendingDiscoveryCandidates = summary.pending
+                document = try await store.load()
+                environments = document.environments
+                applications = document.applications
+                launchEntries = document.launchEntries
+                operations = document.operations.sorted { $0.createdAt > $1.createdAt }
+            }
             if !applications.contains(where: { $0.id == selectedApplicationID }) {
                 selectedApplicationID = applications.first?.id
             }
             if !environments.contains(where: { $0.id == selectedEnvironmentID }) {
                 selectedEnvironmentID = environments.first?.id
             }
-            libraryState = .success(applications.isEmpty ? nil : "Library updated.")
+            libraryState = discoveryFailureCount == 0
+                ? .success(applications.isEmpty ? nil : "Library updated.")
+                : .partial("Some Environments could not be scanned.")
             activityState = .success(nil)
         } catch {
             libraryState = .recovery(error.localizedDescription)
@@ -324,6 +337,17 @@ final class AppModel: ObservableObject {
 
     func scanApplications(environmentID: WindowsEnvironment.ID? = nil) async {
         libraryState = .loading
+        let summary = await discoverApplications(environmentID: environmentID)
+        pendingDiscoveryCandidates = summary.pending
+        await load(scanRegisteredEnvironments: false)
+        libraryState = summary.failureCount == 0
+            ? .success("Application scan completed.")
+            : .partial("Some Environments could not be scanned.")
+    }
+
+    private func discoverApplications(
+        environmentID: WindowsEnvironment.ID?
+    ) async -> (failureCount: Int, pending: [PendingDiscoveryCandidate]) {
         var failureCount = 0
         var pending: [PendingDiscoveryCandidate] = []
         for environment in environments
@@ -341,11 +365,7 @@ final class AppModel: ObservableObject {
                 failureCount += 1
             }
         }
-        pendingDiscoveryCandidates = pending
-        await load()
-        libraryState = failureCount == 0
-            ? .success("Application scan completed.")
-            : .partial("Some Environments could not be scanned.")
+        return (failureCount, pending)
     }
 
     func confirmDiscovery(_ pending: PendingDiscoveryCandidate) async {
