@@ -17,6 +17,12 @@ struct StillCLI {
         let command = arguments.first ?? "help"
         let rootURL = rootURL(from: arguments)
         let store = JSONBottleStore(rootURL: rootURL)
+        let frozenLegacyMutations: Set<String> = [
+            "create", "setup-steam", "pin-app", "unpin-app", "set-engine"
+        ]
+        if frozenLegacyMutations.contains(command) {
+            throw CLIError.legacyMutationFrozen(command)
+        }
 
         switch command {
         case "info":
@@ -217,20 +223,20 @@ struct StillCLI {
 
               info                 Show build and storage information.
               list                 List bottles.
-              create <name>        Create bottle metadata.
+              create <name>        Temporarily unavailable during store migration.
               engines              List public and installed engines.
               install-engine <id>  Download, verify, and install an engine.
               install-engine-archive <id> <path>
                                     Verify and install a local engine archive.
               setup-steam <local-exe>
-                                    Install Steam from a user-supplied local file.
+                                    Temporarily unavailable during store migration.
               scan-apps [bottle-id] Scan Windows apps in one or all bottles.
               pin-app <bottle-id> <exe-path> [name]
-                                    Add a manual executable to the app library.
+                                    Temporarily unavailable during store migration.
               unpin-app <bottle-id> <application-id>
-                                    Remove a manual executable.
+                                    Temporarily unavailable during store migration.
               set-engine <bottle-id> <engine-id>
-                                    Change the Wine engine used by a bottle.
+                                    Temporarily unavailable during store migration.
               help                 Show this help.
 
             Options:
@@ -250,6 +256,7 @@ private enum CLIError: LocalizedError {
     case missingPinArguments
     case missingUnpinArguments
     case missingSetEngineArguments
+    case legacyMutationFrozen(String)
     case bottleNotFound(String)
     case unknownCommand(String)
 
@@ -269,6 +276,8 @@ private enum CLIError: LocalizedError {
             "The unpin-app command requires a bottle ID and application ID."
         case .missingSetEngineArguments:
             "The set-engine command requires a bottle ID and engine ID."
+        case .legacyMutationFrozen(let command):
+            "The '\(command)' command is temporarily read-only while Still migrates the CLI to its primary store. No data was changed."
         case .bottleNotFound(let value):
             "Bottle '\(value)' was not found."
         case .unknownCommand(let command):
