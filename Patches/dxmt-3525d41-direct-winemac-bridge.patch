@@ -1,0 +1,71 @@
+diff --git a/src/winemetal/unix/winemetal_unix.c b/src/winemetal/unix/winemetal_unix.c
+index 0bfd7e2..6f13957 100644
+--- a/src/winemetal/unix/winemetal_unix.c
++++ b/src/winemetal/unix/winemetal_unix.c
+@@ -1593,10 +1593,53 @@ struct macdrv_functions_t {
+   void (*on_main_thread)(dispatch_block_t b);
+ };
+ 
++#define STILL_DXMT_BRIDGE_ABI_V1 1u
++struct still_dxmt_bridge_v1 {
++  uint32_t abi_version;
++  uint32_t struct_size;
++  macdrv_metal_view (*create_metal_view)(HWND hwnd, macdrv_metal_device device,
++                                         macdrv_metal_layer *layer);
++  void (*release_metal_view)(macdrv_metal_view view);
++};
++typedef const struct still_dxmt_bridge_v1 *(*still_dxmt_query_bridge_fn)(
++    uint32_t minimum_abi, uint32_t maximum_abi);
++
++static const struct still_dxmt_bridge_v1 *
++query_still_dxmt_bridge(void) {
++  still_dxmt_query_bridge_fn query = dlsym(RTLD_DEFAULT,
++                                            "still_macdrv_query_dxmt_bridge");
++  if (!query)
++    return NULL;
++  const struct still_dxmt_bridge_v1 *bridge =
++      query(STILL_DXMT_BRIDGE_ABI_V1, STILL_DXMT_BRIDGE_ABI_V1);
++  if (!bridge || bridge->abi_version != STILL_DXMT_BRIDGE_ABI_V1 ||
++      bridge->struct_size < sizeof(*bridge) || !bridge->create_metal_view ||
++      !bridge->release_metal_view)
++    return NULL;
++  return bridge;
++}
++
+ static NTSTATUS
+ _CreateMetalViewFromHWND(void *obj) {
+   struct unixcall_create_metal_view_from_hwnd *params = obj;
+ 
++  params->ret_view = 0;
++  params->ret_layer = 0;
++
++  const struct still_dxmt_bridge_v1 *bridge = query_still_dxmt_bridge();
++  if (bridge) {
++    macdrv_metal_layer layer = NULL;
++    macdrv_metal_view view = bridge->create_metal_view(
++        (HWND)params->hwnd, (macdrv_metal_device)params->device, &layer);
++    if (view && layer) {
++      params->ret_view = (obj_handle_t)view;
++      params->ret_layer = (obj_handle_t)layer;
++    } else if (view) {
++      bridge->release_metal_view(view);
++    }
++    return STATUS_SUCCESS;
++  }
++
+   struct macdrv_win_data *(*pfn_get_win_data)(HWND hwnd) = NULL;
+   void (*pfn_release_win_data)(struct macdrv_win_data *data) = NULL;
+   macdrv_metal_view (*pfn_macdrv_view_create_metal_view)(macdrv_view v, macdrv_metal_device d) = NULL;
+@@ -1634,6 +1677,12 @@ static NTSTATUS
+ _ReleaseMetalView(void *obj) {
+   struct unixcall_generic_obj_noret *params = obj;
+ 
++  const struct still_dxmt_bridge_v1 *bridge = query_still_dxmt_bridge();
++  if (bridge) {
++    bridge->release_metal_view((macdrv_metal_view)params->handle);
++    return STATUS_SUCCESS;
++  }
++
+   void (*pfn_macdrv_view_release_metal_view)(macdrv_metal_view v) = NULL;
+ 
+   struct macdrv_functions_t *macdrv_functions;

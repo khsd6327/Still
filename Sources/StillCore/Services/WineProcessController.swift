@@ -35,6 +35,27 @@ public actor WineProcessController {
         }
     }
 
+    public func forceStop(
+        bottle: Bottle,
+        engine: EngineDescriptor
+    ) async throws {
+        let sessionID = UUID()
+        let exitCode = try await processSupervisor.runAndWait(
+            WineCommandBuilder.forceStopPlan(
+                sessionID: sessionID,
+                engine: engine,
+                bottle: bottle,
+                logURL: LogLocations.launchLogURL(
+                    sessionID: sessionID,
+                    rootURL: logsRootURL
+                )
+            )
+        )
+        guard exitCode == 0 || exitCode == 1 else {
+            throw StillCoreError.processFailed(exitCode)
+        }
+    }
+
     @discardableResult
     public func launchTool(
         _ arguments: [String],

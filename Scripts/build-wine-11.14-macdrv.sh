@@ -53,23 +53,26 @@ if [ "${STILL_WINE_RAW_ANGLE:-0}" = "1" ]; then
     fi
 fi
 
-if [ "${STILL_WINE_DXMT_BRIDGE:-0}" = "1" ]; then
-    if git -C "$source_dir" apply --check "$dxmt_bridge_patch" 2>/dev/null; then
-        git -C "$source_dir" apply "$dxmt_bridge_patch"
-    elif ! git -C "$source_dir" apply --reverse --check "$dxmt_bridge_patch" 2>/dev/null; then
-        echo "error: the DXMT bridge patch neither applies cleanly nor is already applied" >&2
-        exit 65
-    fi
+if git -C "$source_dir" apply --check "$dxmt_bridge_patch" 2>/dev/null; then
+    git -C "$source_dir" apply "$dxmt_bridge_patch"
+elif ! git -C "$source_dir" apply --reverse --check "$dxmt_bridge_patch" 2>/dev/null; then
+    echo "error: the direct DXMT bridge patch neither applies cleanly nor is already applied" >&2
+    exit 65
 fi
 
 mkdir -p "$build_dir"
 
 if [ ! -f "$build_dir/Makefile" ]; then
     host_triplet="x86_64-apple-darwin$(uname -r)"
+    bison_bin=${STILL_BISON_BIN:-/opt/homebrew/opt/bison/bin/bison}
+    if [ ! -x "$bison_bin" ]; then
+        bison_bin=$(command -v bison)
+    fi
     (
         cd "$build_dir"
         CC="clang -arch x86_64" \
         CXX="clang++ -arch x86_64" \
+        BISON="$bison_bin" \
         "$source_dir/configure" \
             --build="$host_triplet" \
             --host="$host_triplet" \
@@ -84,7 +87,7 @@ make -C "$build_dir" -j "${STILL_BUILD_JOBS:-8}" dlls/winemac.drv/winemac.so
 
 echo "$build_dir/dlls/winemac.drv/winemac.so"
 
-if [ "${STILL_WINE_DXMT_BRIDGE:-0}" = "1" ]; then
+if [ "${STILL_WINE_DXMT_DIAGNOSTIC_SHIM:-0}" = "1" ]; then
     bridge_output="$build_dir/libstill-dxmt-macdrv-bridge.dylib"
     clang -dynamiclib -arch x86_64 -Wall -Wextra -Werror \
         -o "$bridge_output" "$dxmt_bridge_source"

@@ -58,7 +58,7 @@ index c0384f3..4495ace 100644
  #include <IOKit/pwr_mgt/IOPMLib.h>
  #define GetCurrentThread Mac_GetCurrentThread
  #define LoadResource Mac_LoadResource
-@@ -214,6 +215,93 @@ void release_win_data(struct macdrv_win_data *data)
+@@ -214,6 +215,119 @@ void release_win_data(struct macdrv_win_data *data)
      if (data) pthread_mutex_unlock(&win_data_mutex);
  }
  
@@ -68,6 +68,16 @@ index c0384f3..4495ace 100644
 +{
 +    macdrv_metal_view metal_view;
 +    macdrv_view owned_host_view;
++};
++
++#define STILL_DXMT_BRIDGE_ABI_V1 1u
++struct still_dxmt_bridge_v1
++{
++    uint32_t abi_version;
++    uint32_t struct_size;
++    macdrv_metal_view (*create_metal_view)(HWND hwnd, macdrv_metal_device device,
++                                           macdrv_metal_layer *layer);
++    void (*release_metal_view)(macdrv_metal_view view);
 +};
 +
 +__attribute__((visibility("default"))) macdrv_metal_view
@@ -147,6 +157,22 @@ index c0384f3..4495ace 100644
 +    if (bridge->metal_view) macdrv_view_release_metal_view(bridge->metal_view);
 +    if (bridge->owned_host_view) macdrv_dispose_view(bridge->owned_host_view);
 +    free(bridge);
++}
++
++static const struct still_dxmt_bridge_v1 still_dxmt_bridge_v1 =
++{
++    STILL_DXMT_BRIDGE_ABI_V1,
++    sizeof(struct still_dxmt_bridge_v1),
++    still_macdrv_create_metal_view_from_hwnd_v1,
++    still_macdrv_release_metal_view_v1,
++};
++
++__attribute__((visibility("default"))) const struct still_dxmt_bridge_v1 *
++still_macdrv_query_dxmt_bridge(uint32_t minimum_abi, uint32_t maximum_abi)
++{
++    if (minimum_abi > STILL_DXMT_BRIDGE_ABI_V1 || maximum_abi < STILL_DXMT_BRIDGE_ABI_V1)
++        return NULL;
++    return &still_dxmt_bridge_v1;
 +}
 +
  

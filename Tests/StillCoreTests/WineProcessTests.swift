@@ -43,7 +43,7 @@ final class WineProcessTests: XCTestCase {
         XCTAssertNil(plan.environment["NODE_REPL_TRUSTED_BROWSER_CLIENT_SHA256S"])
     }
 
-    func testStopPlanUsesBottleWineServer() {
+    func testNormalAndForceStopPlansAreDistinct() {
         let bottle = Bottle(
             name: "Steam",
             prefixURL: URL(filePath: "/tmp/Still Bottle"),
@@ -63,12 +63,17 @@ final class WineProcessTests: XCTestCase {
             logURL: URL(filePath: "/tmp/stop.log")
         )
 
-        XCTAssertEqual(
-            plan.executableURL,
-            URL(filePath: "/opt/wine/bin/wineserver")
-        )
-        XCTAssertEqual(plan.arguments, ["-k"])
+        XCTAssertEqual(plan.executableURL, engine.wineBinaryURL)
+        XCTAssertEqual(plan.arguments, ["wineboot", "--end-session"])
         XCTAssertEqual(plan.environment["WINEPREFIX"], "/tmp/Still Bottle")
+
+        let forcePlan = WineCommandBuilder.forceStopPlan(
+            engine: engine,
+            bottle: bottle,
+            logURL: URL(filePath: "/tmp/force-stop.log")
+        )
+        XCTAssertEqual(forcePlan.executableURL, URL(filePath: "/opt/wine/bin/wineserver"))
+        XCTAssertEqual(forcePlan.arguments, ["-k"])
     }
 
     func testCompatibilityEnvironmentUsesMSyncAndMetalDiagnostics() {
@@ -101,7 +106,7 @@ final class WineProcessTests: XCTestCase {
         XCTAssertEqual(plan.environment["METAL_CAPTURE_ENABLED"], "1")
     }
 
-    func testDXMTEnvironmentLoadsBridgeWhenEngineContainsIt() throws {
+    func testDXMTEnvironmentDoesNotInjectDiagnosticShimByDefault() throws {
         let rootURL = FileManager.default.temporaryDirectory
             .appending(path: "StillDXMTTests")
             .appending(path: UUID().uuidString)
@@ -143,8 +148,71 @@ final class WineProcessTests: XCTestCase {
             plan.environment["WINEDLLOVERRIDES"],
             "dxgi,d3d9,d3d10core,d3d11=b"
         )
-        XCTAssertEqual(plan.environment["DYLD_INSERT_LIBRARIES"], bridgeURL.path)
+        XCTAssertNil(plan.environment["DYLD_INSERT_LIBRARIES"])
     }
+
+#if DEBUG
+    func testDXMTDiagnosticShimRequiresExplicitDebugOptIn() throws {
+        let rootURL = FileManager.default.temporaryDirectory
+            .appending(path: "StillDXMTDiagnosticTests")
+            .appending(path: UUID().uuidString)
+        let wineURL = rootURL.appending(path: "wine/bin/wine")
+        let bridgeURL = rootURL.appending(
+            path: "wine/lib/wine/x86_64-unix/libstill-dxmt-macdrv-bridge.dylib"
+        )
+        try FileManager.default.createDirectory(
+            at: bridgeURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try Data().write(to: bridgeURL)
+        defer { try? FileManager.default.removeItem(at: rootURL) }
+
+        let plan = WineCommandBuilder.utilityPlan(
+            engine: EngineDescriptor(
+                id: "dxmt-test", displayName: "DXMT Test", version: "1",
+                wineBinaryURL: wineURL, capabilities: [.win64]
+            ),
+            bottle: Bottle(
+                name: "DXMT", prefixURL: rootURL.appending(path: "prefix"),
+                graphicsBackend: .dxmt
+            ),
+            arguments: ["winecfg"],
+            logURL: rootURL.appending(path: "dxmt.log")
+        )
+        let optedIn = WineCommandBuilder.utilityPlan(
+            engine: EngineDescriptor(
+                id: "dxmt-test", displayName: "DXMT Test", version: "1",
+                wineBinaryURL: wineURL, capabilities: [.win64]
+            ),
+            bottle: Bottle(
+                name: "DXMT", prefixURL: rootURL.appending(path: "prefix"),
+                graphicsBackend: .dxmt
+            ),
+            arguments: ["winecfg"],
+            logURL: rootURL.appending(path: "dxmt-opt-in.log")
+        )
+        XCTAssertNil(plan.environment["DYLD_INSERT_LIBRARIES"])
+
+        let direct = WineCommandBuilder.launchPlan(
+            engine: EngineDescriptor(
+                id: "dxmt-test", displayName: "DXMT Test", version: "1",
+                wineBinaryURL: wineURL, capabilities: [.win64]
+            ),
+            request: LaunchRequest(
+                bottle: Bottle(
+                    name: "DXMT", prefixURL: rootURL.appending(path: "prefix"),
+                    graphicsBackend: .dxmt
+                ),
+                executableURL: rootURL.appending(path: "game.exe"),
+                environment: ["STILL_ENABLE_DXMT_DIAGNOSTIC_SHIM": "1"]
+            ),
+            logURL: rootURL.appending(path: "launch.log")
+        )
+        XCTAssertNil(optedIn.environment["DYLD_INSERT_LIBRARIES"])
+        XCTAssertEqual(direct.environment["DYLD_INSERT_LIBRARIES"], bridgeURL.path)
+        XCTAssertNil(direct.environment["STILL_ENABLE_DXMT_DIAGNOSTIC_SHIM"])
+    }
+#endif
 
     func testDXMTEnvironmentDoesNotInjectMissingBridge() {
         let bottle = Bottle(

@@ -3,7 +3,8 @@
  * Compatibility bridge for Wine and DXMT's winemetal.so. Wine loads its Unix
  * libraries locally, so DXMT's
  * dlsym(RTLD_DEFAULT, "macdrv_functions") cannot see winemac symbols.
- * DYLD_INSERT_LIBRARIES makes this compatibility table globally visible.
+ * A Debug-only opt-in can use DYLD_INSERT_LIBRARIES to make this compatibility
+ * table globally visible. Product launch plans use the direct v1 bridge.
  */
 
 #include <dlfcn.h>

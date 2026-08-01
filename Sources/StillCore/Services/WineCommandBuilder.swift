@@ -9,6 +9,8 @@ public enum WineCommandBuilder {
     ) -> ProcessPlan {
         ProcessPlan(
             sessionID: sessionID,
+            applicationID: request.applicationID,
+            environmentID: request.environmentID,
             executableURL: engine.wineBinaryURL,
             arguments: [
                 "start",
@@ -43,6 +45,22 @@ public enum WineCommandBuilder {
     }
 
     public static func stopPlan(
+        sessionID: UUID = UUID(),
+        engine: EngineDescriptor,
+        bottle: Bottle,
+        logURL: URL
+    ) -> ProcessPlan {
+        ProcessPlan(
+            sessionID: sessionID,
+            executableURL: engine.wineBinaryURL,
+            arguments: ["wineboot", "--end-session"],
+            environment: wineEnvironment(bottle: bottle, engine: engine),
+            workingDirectoryURL: bottle.prefixURL,
+            logURL: logURL
+        )
+    }
+
+    public static func forceStopPlan(
         sessionID: UUID = UUID(),
         engine: EngineDescriptor,
         bottle: Bottle,
@@ -121,16 +139,23 @@ public enum WineCommandBuilder {
         }
         if bottle.graphicsBackend == .dxmt {
             environment["WINEDLLOVERRIDES"] = "dxgi,d3d9,d3d10core,d3d11=b"
-            let bridgeURL = dxmtBridgeURL(for: engine)
+        }
+        environment.merge(overrides, uniquingKeysWith: { _, replacement in replacement })
+#if DEBUG
+        if environment.removeValue(forKey: "STILL_ENABLE_DXMT_DIAGNOSTIC_SHIM") == "1",
+           bottle.graphicsBackend == .dxmt {
+            let bridgeURL = dxmtDiagnosticShimURL(for: engine)
             if FileManager.default.fileExists(atPath: bridgeURL.path) {
                 environment["DYLD_INSERT_LIBRARIES"] = bridgeURL.path
             }
         }
-        environment.merge(overrides, uniquingKeysWith: { _, replacement in replacement })
+#else
+        environment.removeValue(forKey: "STILL_ENABLE_DXMT_DIAGNOSTIC_SHIM")
+#endif
         return environment
     }
 
-    static func dxmtBridgeURL(for engine: EngineDescriptor) -> URL {
+    static func dxmtDiagnosticShimURL(for engine: EngineDescriptor) -> URL {
         engine.wineBinaryURL
             .deletingLastPathComponent()
             .deletingLastPathComponent()
