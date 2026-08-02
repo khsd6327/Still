@@ -9,7 +9,16 @@ public struct CompatibilityProfileMatcher: Sendable {
         executableURL: URL,
         profiles: [CompatibilityProfile]
     ) -> String? {
-        existingSelection ?? profile(
+        if let existingSelection,
+           let existingProfile = profiles.first(where: { $0.id == existingSelection }),
+           matches(existingProfile, application: application, executableURL: executableURL) {
+            return existingSelection
+        }
+        if let existingSelection,
+           !profiles.contains(where: { $0.id == existingSelection }) {
+            return existingSelection
+        }
+        return profile(
             for: application,
             executableURL: executableURL,
             profiles: profiles

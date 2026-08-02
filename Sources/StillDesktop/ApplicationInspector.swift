@@ -42,7 +42,10 @@ struct ApplicationInspector: View {
                 Section("Status") {
                     LabeledContent("Environment", value: environmentName(application))
                     LabeledContent("Last Used", value: application.lastLaunchedAt?.formatted() ?? "Never")
-                    LabeledContent("Compatibility", value: application.selectedProfileID ?? "Environment Default")
+                    LabeledContent(
+                        "Compatibility",
+                        value: model.effectiveProfileID(for: application) ?? "Environment Default"
+                    )
                     if let provider = application.providerID {
                         LabeledContent("Provider", value: provider.capitalized)
                     }

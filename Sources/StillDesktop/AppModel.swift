@@ -15,6 +15,7 @@ final class AppModel: ObservableObject {
     private let engineInstaller = EngineInstaller()
     private let discoveryCoordinator = ApplicationDiscoveryCoordinator()
     private let supervisor = ProcessSupervisor()
+    private let environmentOperationCoordinator = EnvironmentOperationCoordinator()
     private let restorePointService = RestorePointService()
     private let backupService = BackupService()
     private let recoveryService = EnvironmentRecoveryService()
@@ -85,6 +86,7 @@ final class AppModel: ObservableObject {
     @Published var requiresPermanentDeletionConfirmation = false
     @Published var repairReport: RepairReport?
     @Published var latestRestorePoint: RestorePointManifest?
+    @Published var pendingRestorePointRestore: RestorePointManifest?
     @Published var logRetentionDays: Int {
         didSet {
             UserDefaults.standard.set(logRetentionDays, forKey: "logRetentionDays")
@@ -144,6 +146,18 @@ final class AppModel: ObservableObject {
     var selectedSession: LaunchSession? {
         guard let applicationID = selectedApplicationID else { return nil }
         return sessions.first { $0.applicationID == applicationID && $0.state.isActive }
+    }
+
+    func effectiveProfileID(for application: LibraryApplication) -> String? {
+        guard let entryID = application.launchEntryIDs.first,
+              let entry = launchEntries.first(where: { $0.id == entryID }) else {
+            return application.selectedProfileID
+        }
+        return profileMatcher.profile(
+            for: application,
+            executableURL: entry.executableURL,
+            profiles: BundledCompatibilityProfiles.all
+        )?.id ?? application.selectedProfileID
     }
 
     var hasCustomCompatibility: Bool {
@@ -336,34 +350,36 @@ final class AppModel: ObservableObject {
         installState = .loading
         var operation = StillOperation(kind: .launchInstaller, environmentID: environment.id)
         do {
-            var effectiveEnvironment = environment
-            let installerArguments: [String]
-            if let matchedInstallerProfile {
-                effectiveEnvironment.profileID = matchedInstallerProfile.id
-                effectiveEnvironment.updatedAt = .now
-                try await store.saveEnvironment(effectiveEnvironment)
-                installerArguments = BundledApplicationRecipes.steam.installer?.arguments ?? []
-            } else {
-                installerArguments = []
+            try await withEnvironmentLease(operation) {
+                var effectiveEnvironment = environment
+                let installerArguments: [String]
+                if let matchedInstallerProfile {
+                    effectiveEnvironment.profileID = matchedInstallerProfile.id
+                    effectiveEnvironment.updatedAt = .now
+                    try await store.saveEnvironment(effectiveEnvironment)
+                    installerArguments = BundledApplicationRecipes.steam.installer?.arguments ?? []
+                } else {
+                    installerArguments = []
+                }
+                try operation.transition(to: .running)
+                try await store.saveOperation(operation)
+                let engine = try engine(for: effectiveEnvironment)
+                let session = try await LocalWineEngine(
+                    descriptor: engine,
+                    processSupervisor: supervisor
+                ).launch(LaunchRequest(
+                    bottle: bottle(from: effectiveEnvironment),
+                    executableURL: installerURL,
+                    arguments: installerArguments,
+                    environmentID: effectiveEnvironment.id
+                ))
+                sessions.append(session)
+                operation.appendEvent("The local installer was launched.")
+                try operation.transition(to: .succeeded, resultSummary: "Installer launched")
+                try await store.saveOperation(operation)
+                installState = .success("Installer launched. Scan after installation finishes.")
+                await refreshActivity()
             }
-            try operation.transition(to: .running)
-            try await store.saveOperation(operation)
-            let engine = try engine(for: effectiveEnvironment)
-            let session = try await LocalWineEngine(
-                descriptor: engine,
-                processSupervisor: supervisor
-            ).launch(LaunchRequest(
-                bottle: bottle(from: effectiveEnvironment),
-                executableURL: installerURL,
-                arguments: installerArguments,
-                environmentID: effectiveEnvironment.id
-            ))
-            sessions.append(session)
-            operation.appendEvent("The local installer was launched.")
-            try operation.transition(to: .succeeded, resultSummary: "Installer launched")
-            try await store.saveOperation(operation)
-            installState = .success("Installer launched. Scan after installation finishes.")
-            await refreshActivity()
         } catch {
             if operation.state == .running {
                 try? operation.transition(to: .failed, resultSummary: error.localizedDescription)
@@ -452,24 +468,25 @@ final class AppModel: ObservableObject {
               let entryID = application.launchEntryIDs.first,
               let entry = launchEntries.first(where: { $0.id == entryID }) else { return }
         do {
-            if let state = application.providerManagedState, state != .installed {
-                throw StillCoreError.invalidApplicationState(
-                    "\(state.rawValue) (managed by \(application.providerID ?? "provider"))"
+            try await withEnvironmentLease(StillOperation(
+                kind: .launchApplication,
+                environmentID: environment.id,
+                applicationID: application.id
+            )) {
+                if let state = application.providerManagedState, state != .installed {
+                    throw StillCoreError.invalidApplicationState(
+                        "\(state.rawValue) (managed by \(application.providerID ?? "provider"))"
+                    )
+                }
+                let engine = try engine(for: environment)
+                let document = try await store.load()
+                let engineBuild = try runtimeBuild(for: engine)
+                let profile = profileMatcher.profile(
+                    for: application,
+                    executableURL: entry.executableURL,
+                    profiles: BundledCompatibilityProfiles.all
                 )
-            }
-            let engine = try engine(for: environment)
-            let document = try await store.load()
-            let engineBuild = try runtimeBuild(for: engine)
-            let profile = profileMatcher.profile(
-                for: application,
-                executableURL: entry.executableURL,
-                profiles: BundledCompatibilityProfiles.all
-            )
-            let effective = try compatibilityResolver.resolve(
-                environment: environment,
-                profile: profile,
-                engineFamily: engineBuild.family,
-                registry: CapabilityRegistry(
+                let registry = CapabilityRegistry(
                     host: currentHostCapabilities(),
                     engine: engineBuild,
                     components: document.components,
@@ -477,52 +494,62 @@ final class AppModel: ObservableObject {
                         ? dxmtBridgeValidator.validate(engine: engine)
                         : nil
                 )
-            )
-            var effectiveEnvironment = environment
-            effectiveEnvironment.windowsVersion = effective.windowsVersion.value
-            effectiveEnvironment.graphicsBackend = effective.graphicsBackend.value
-            effectiveEnvironment.enhancedSync = effective.enhancedSync.value
-            let effectiveBottle = bottle(from: effectiveEnvironment)
-            var launchEnvironment = effective.environmentVariables.mapValues(\.value)
-            var resolvedArguments = entry.arguments
-            if SteamBootstrapper.isSteamClientExecutable(entry.executableURL) {
-                launchEnvironment.merge(
-                    SteamBootstrapper.launchEnvironment(
-                        for: effectiveBottle,
-                        executableURL: entry.executableURL
-                    ),
-                    uniquingKeysWith: { _, profileValue in profileValue }
+                let baseline = try compatibilityResolver.resolve(
+                    environment: environment,
+                    profile: profile,
+                    engineFamily: engineBuild.family,
+                    engineDXMTRevision: engineBuild.dxmtRevision,
+                    registry: registry
                 )
-                resolvedArguments = mergedArguments(
-                    resolvedArguments,
-                    SteamBootstrapper.launchArguments(for: effectiveBottle)
+                var baselineEnvironment = environment
+                baselineEnvironment.windowsVersion = baseline.windowsVersion.value
+                baselineEnvironment.graphicsBackend = baseline.graphicsBackend.value
+                baselineEnvironment.enhancedSync = baseline.enhancedSync.value
+                let runtimePolicy = SteamBootstrapper.compatibilitySettings(
+                    for: bottle(from: baselineEnvironment),
+                    executableURL: entry.executableURL
                 )
+                let effective = try compatibilityResolver.resolve(
+                    environment: environment,
+                    profile: profile,
+                    runtimePolicySettings: runtimePolicy,
+                    runtimePolicyID: "steam-client",
+                    engineFamily: engineBuild.family,
+                    engineDXMTRevision: engineBuild.dxmtRevision,
+                    registry: registry
+                )
+                var effectiveEnvironment = environment
+                effectiveEnvironment.windowsVersion = effective.windowsVersion.value
+                effectiveEnvironment.graphicsBackend = effective.graphicsBackend.value
+                effectiveEnvironment.enhancedSync = effective.enhancedSync.value
+                let effectiveBottle = bottle(from: effectiveEnvironment)
+                let launchEnvironment = effective.environmentVariables.mapValues(\.value)
+                let resolvedArguments = LaunchArgumentMerger.merge(
+                    entry.arguments,
+                    effective.launchArguments
+                )
+                let session = try await LocalWineEngine(
+                    descriptor: engine,
+                    processSupervisor: supervisor
+                ).launch(LaunchRequest(
+                    bottle: effectiveBottle,
+                    executableURL: entry.executableURL,
+                    arguments: resolvedArguments,
+                    environment: launchEnvironment,
+                    workingDirectoryURL: entry.workingDirectoryURL,
+                    applicationID: application.id,
+                    environmentID: environment.id
+                ))
+                sessions.append(session)
+                application.lastLaunchedAt = .now
+                try await store.saveApplication(
+                    application,
+                    launchEntries: launchEntries.filter { $0.applicationID == application.id }
+                )
+                await load()
+                selectedApplicationID = application.id
+                activityState = .success("\(application.name) started.")
             }
-            resolvedArguments = mergedArguments(
-                resolvedArguments,
-                effective.launchArguments
-            )
-            let session = try await LocalWineEngine(
-                descriptor: engine,
-                processSupervisor: supervisor
-            ).launch(LaunchRequest(
-                bottle: effectiveBottle,
-                executableURL: entry.executableURL,
-                arguments: resolvedArguments,
-                environment: launchEnvironment,
-                workingDirectoryURL: entry.workingDirectoryURL,
-                applicationID: application.id,
-                environmentID: environment.id
-            ))
-            sessions.append(session)
-            application.lastLaunchedAt = .now
-            try await store.saveApplication(
-                application,
-                launchEntries: launchEntries.filter { $0.applicationID == application.id }
-            )
-            await load()
-            selectedApplicationID = application.id
-            activityState = .success("\(application.name) started.")
         } catch {
             activityState = .failure(error.localizedDescription)
             errorMessage = error.localizedDescription
@@ -653,20 +680,79 @@ final class AppModel: ObservableObject {
     func createRestorePoint(for environment: WindowsEnvironment) async {
         var operation = StillOperation(kind: .createRestorePoint, environmentID: environment.id)
         do {
-            try operation.transition(to: .running)
-            try await store.saveOperation(operation)
-            latestRestorePoint = try await restorePointService.create(
-                environment: environment,
-                applications: applications,
-                launchEntries: launchEntries,
-                activeSessions: sessions
-            )
-            try operation.transition(to: .succeeded, resultSummary: "Restore Point created")
-            try await store.saveOperation(operation)
-            await refreshActivity()
+            try await withEnvironmentLease(operation) {
+                try operation.transition(to: .running)
+                try await store.saveOperation(operation)
+                latestRestorePoint = try await restorePointService.create(
+                    environment: environment,
+                    applications: applications,
+                    launchEntries: launchEntries,
+                    activeSessions: sessions
+                )
+                try operation.transition(to: .succeeded, resultSummary: "Restore Point created")
+                try await store.saveOperation(operation)
+                await refreshActivity()
+            }
         } catch {
             if operation.state == .running {
                 try? operation.transition(to: .failed, resultSummary: error.localizedDescription)
+                try? await store.saveOperation(operation)
+            }
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func prepareLatestRestorePoint(for environment: WindowsEnvironment) async {
+        do {
+            guard let point = try await restorePointService.manifests(
+                environmentID: environment.id
+            ).first else {
+                throw StillCoreError.invalidStore(
+                    "No Restore Points are available for this Environment."
+                )
+            }
+            pendingRestorePointRestore = point
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func confirmRestorePoint() async {
+        guard let point = pendingRestorePointRestore,
+              let environment = environments.first(where: { $0.id == point.environmentID }) else {
+            pendingRestorePointRestore = nil
+            return
+        }
+        var operation = StillOperation(
+            kind: .restoreRestorePoint,
+            environmentID: environment.id
+        )
+        do {
+            try await withEnvironmentLease(operation) {
+                try operation.transition(to: .running)
+                try await store.saveOperation(operation)
+                _ = try await restorePointService.restore(
+                    id: point.id,
+                    environment: environment,
+                    activeSessions: sessions,
+                    store: store
+                )
+                try operation.transition(
+                    to: .succeeded,
+                    resultSummary: "Restore Point restored"
+                )
+                try await store.saveOperation(operation)
+                pendingRestorePointRestore = nil
+                await load(scanRegisteredEnvironments: false)
+                selectedEnvironmentID = environment.id
+                activityState = .success("Restore Point restored.")
+            }
+        } catch {
+            if operation.state == .running {
+                try? operation.transition(
+                    to: .failed,
+                    resultSummary: error.localizedDescription
+                )
                 try? await store.saveOperation(operation)
             }
             errorMessage = error.localizedDescription
@@ -680,23 +766,28 @@ final class AppModel: ObservableObject {
         guard environment.pinnedEngineBuildID != engine.id else { return }
 
         do {
-            let restorePoint = try await restorePointService.create(
-                environment: environment,
-                applications: applications,
-                launchEntries: launchEntries,
-                activeSessions: sessions
-            )
-            try await store.updatePinnedEngine(
-                environmentID: environment.id,
-                engineBuildID: engine.id,
-                activeSessions: sessions,
-                userApproved: true,
-                restorePointCreated: true
-            )
-            latestRestorePoint = restorePoint
-            await load(scanRegisteredEnvironments: false)
-            selectedEnvironmentID = environment.id
-            activityState = .success("Engine changed to \(engine.displayName).")
+            try await withEnvironmentLease(StillOperation(
+                kind: .changeEngine,
+                environmentID: environment.id
+            )) {
+                let restorePoint = try await restorePointService.create(
+                    environment: environment,
+                    applications: applications,
+                    launchEntries: launchEntries,
+                    activeSessions: sessions
+                )
+                try await store.updatePinnedEngine(
+                    environmentID: environment.id,
+                    engineBuildID: engine.id,
+                    activeSessions: sessions,
+                    userApproved: true,
+                    restorePointCreated: true
+                )
+                latestRestorePoint = restorePoint
+                await load(scanRegisteredEnvironments: false)
+                selectedEnvironmentID = environment.id
+                activityState = .success("Engine changed to \(engine.displayName).")
+            }
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -705,31 +796,33 @@ final class AppModel: ObservableObject {
     func duplicate(_ environment: WindowsEnvironment) async {
         var operation = StillOperation(kind: .duplicateEnvironment, environmentID: environment.id)
         do {
-            try operation.transition(to: .running)
-            try await store.saveOperation(operation)
-            let duplicate = try recoveryService.duplicate(
-                environment,
-                name: "\(environment.name) Copy",
-                managedRootURL: ownershipService.managedRootURL,
-                activeSessions: sessions
-            )
-            do {
-                let document = try await store.load()
-                try ownershipService.writeMarker(
-                    for: duplicate,
-                    storeIdentifier: document.storeIdentifier
+            try await withEnvironmentLease(operation) {
+                try operation.transition(to: .running)
+                try await store.saveOperation(operation)
+                let duplicate = try recoveryService.duplicate(
+                    environment,
+                    name: "\(environment.name) Copy",
+                    managedRootURL: ownershipService.managedRootURL,
+                    activeSessions: sessions
                 )
-                try await store.saveEnvironment(duplicate)
-            } catch {
-                if FileManager.default.fileExists(atPath: duplicate.prefixURL.path) {
-                    try? FileManager.default.removeItem(at: duplicate.prefixURL)
+                do {
+                    let document = try await store.load()
+                    try ownershipService.writeMarker(
+                        for: duplicate,
+                        storeIdentifier: document.storeIdentifier
+                    )
+                    try await store.saveEnvironment(duplicate)
+                } catch {
+                    if FileManager.default.fileExists(atPath: duplicate.prefixURL.path) {
+                        try? FileManager.default.removeItem(at: duplicate.prefixURL)
+                    }
+                    throw error
                 }
-                throw error
+                try operation.transition(to: .succeeded, resultSummary: "Environment duplicated")
+                try await store.saveOperation(operation)
+                await load()
+                selectedEnvironmentID = duplicate.id
             }
-            try operation.transition(to: .succeeded, resultSummary: "Environment duplicated")
-            try await store.saveOperation(operation)
-            await load()
-            selectedEnvironmentID = duplicate.id
         } catch {
             if operation.state == .running {
                 try? operation.transition(to: .failed, resultSummary: error.localizedDescription)
@@ -764,25 +857,27 @@ final class AppModel: ObservableObject {
     ) async {
         var operation = StillOperation(kind: .backup, environmentID: environment.id)
         do {
-            try operation.transition(to: .running)
-            try await store.saveOperation(operation)
-            let document = try await store.load()
-            let preview = try await backupService.preview(
-                environment: environment,
-                applications: applications,
-                launchEntries: launchEntries,
-                components: document.components,
-                destinationURL: destinationURL,
-                encrypted: encrypted
-            )
-            _ = try await backupService.create(
-                preview: preview,
-                password: password,
-                activeSessions: sessions
-            )
-            try operation.transition(to: .succeeded, resultSummary: "Backup exported")
-            try await store.saveOperation(operation)
-            await refreshActivity()
+            try await withEnvironmentLease(operation) {
+                try operation.transition(to: .running)
+                try await store.saveOperation(operation)
+                let document = try await store.load()
+                let preview = try await backupService.preview(
+                    environment: environment,
+                    applications: applications,
+                    launchEntries: launchEntries,
+                    components: document.components,
+                    destinationURL: destinationURL,
+                    encrypted: encrypted
+                )
+                _ = try await backupService.create(
+                    preview: preview,
+                    password: password,
+                    activeSessions: sessions
+                )
+                try operation.transition(to: .succeeded, resultSummary: "Backup exported")
+                try await store.saveOperation(operation)
+                await refreshActivity()
+            }
         } catch {
             if operation.state == .running {
                 try? operation.transition(to: .failed, resultSummary: error.localizedDescription)
@@ -875,18 +970,38 @@ final class AppModel: ObservableObject {
                     "The Environment selected for deletion no longer exists."
                 )
             }
-            try await deletionCoordinator.delete(
-                environment: environment,
-                method: selectedDeletionMethod,
-                activeSessions: sessions,
-                finalPermanentConfirmation: permanentConfirmed
-            )
-            if rememberDeletionMethod {
-                UserDefaults.standard.set(selectedDeletionMethod.rawValue, forKey: "environmentDeletionMethod")
+            try await withEnvironmentLease(StillOperation(
+                kind: .deleteEnvironment,
+                environmentID: environment.id
+            )) {
+                try await deletionCoordinator.delete(
+                    environment: environment,
+                    method: selectedDeletionMethod,
+                    activeSessions: sessions,
+                    finalPermanentConfirmation: permanentConfirmed
+                )
+                if rememberDeletionMethod {
+                    UserDefaults.standard.set(selectedDeletionMethod.rawValue, forKey: "environmentDeletionMethod")
+                }
+                deletionPreview = nil
+                await load()
             }
-            deletionPreview = nil
-            await load()
         } catch { errorMessage = error.localizedDescription }
+    }
+
+    private func withEnvironmentLease<T>(
+        _ operation: StillOperation,
+        perform work: () async throws -> T
+    ) async throws -> T {
+        try await environmentOperationCoordinator.begin(operation)
+        do {
+            let result = try await work()
+            await environmentOperationCoordinator.finish(operation)
+            return result
+        } catch {
+            await environmentOperationCoordinator.finish(operation)
+            throw error
+        }
     }
 
     private func persist(_ id: UUID?, key: String) {
@@ -915,6 +1030,8 @@ final class AppModel: ObservableObject {
             family: family,
             displayName: engine.displayName,
             version: engine.version,
+            wineVersion: engine.wineVersion,
+            dxmtRevision: engine.dxmtRevision,
             installURL: engine.wineBinaryURL.deletingLastPathComponent(),
             capabilities: engine.capabilities,
             manifestID: bundledManifest?.id,
@@ -938,14 +1055,6 @@ final class AppModel: ObservableObject {
             supportsMetal: MTLCreateSystemDefaultDevice() != nil,
             supportsRosetta: supportsRosetta
         )
-    }
-
-    private func mergedArguments(_ base: [String], _ additions: [String]) -> [String] {
-        var result = base
-        for argument in additions where !result.contains(argument) {
-            result.append(argument)
-        }
-        return result
     }
 
     private func bottle(from environment: WindowsEnvironment) -> Bottle {

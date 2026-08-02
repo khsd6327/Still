@@ -198,7 +198,7 @@ final class OperationLaunchSessionTests: XCTestCase {
         XCTAssertTrue(activeSessions.isEmpty)
     }
 
-    func testTerminationPlanSurvivesExitedMonitorProcess() async throws {
+    func testCompletedSessionCannotReplayItsTerminationPlan() async throws {
         let rootURL = temporaryRoot("ExitedMonitor")
         defer { try? FileManager.default.removeItem(at: rootURL) }
         try FileManager.default.createDirectory(at: rootURL, withIntermediateDirectories: true)
@@ -226,9 +226,13 @@ final class OperationLaunchSessionTests: XCTestCase {
         try await Task.sleep(for: .milliseconds(20))
         _ = await supervisor.session(id: session.id)
 
-        try await supervisor.stop(sessionID: session.id)
-
-        XCTAssertTrue(FileManager.default.fileExists(atPath: markerURL.path))
+        do {
+            try await supervisor.stop(sessionID: session.id)
+            XCTFail("Expected completed session rejection")
+        } catch let error as StillCoreError {
+            XCTAssertEqual(error, .sessionNotFound(session.id))
+        }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: markerURL.path))
     }
 
     private func temporaryRoot(_ name: String) -> URL {

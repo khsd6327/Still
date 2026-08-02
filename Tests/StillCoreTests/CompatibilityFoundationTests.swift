@@ -135,6 +135,48 @@ final class CompatibilityFoundationTests: XCTestCase {
         XCTAssertEqual(nextLaunch.launchArguments, ["--profile"])
     }
 
+    func testResolverTracksRuntimePolicyAndLetsExplicitOverridesWin() throws {
+        let environment = WindowsEnvironment(
+            name: "Steam",
+            prefixURL: URL(filePath: "/tmp/Steam"),
+            graphicsBackend: .dxmt
+        )
+        let effective = try CompatibilityResolver().resolve(
+            environment: environment,
+            runtimePolicySettings: CompatibilitySettings(
+                environmentVariables: ["REMOTE_MODE": "stable"]
+            ),
+            runtimePolicyID: "steam-client",
+            applicationOverrides: CompatibilitySettings(
+                environmentVariables: ["REMOTE_MODE": "diagnostic"]
+            ),
+            registry: makeRegistry(
+                engineCapabilities: [.win64],
+                componentCapabilities: [.dxmt, .dxmtBridge]
+            )
+        )
+
+        XCTAssertEqual(effective.environmentVariables["REMOTE_MODE"]?.value, "diagnostic")
+        XCTAssertEqual(
+            effective.environmentVariables["REMOTE_MODE"]?.source,
+            .applicationOverride
+        )
+    }
+
+    func testLaunchArgumentMergerReplacesPairedAndEqualsOptionsWithoutOrphans() {
+        XCTAssertEqual(
+            LaunchArgumentMerger.merge(
+                ["-applaunch", "2488370", "-screen-width", "1280", "-ResX=1280"],
+                ["-screen-width", "1920", "-ResX=1920"]
+            ),
+            ["-applaunch", "2488370", "-screen-width", "1920", "-ResX=1920"]
+        )
+        XCTAssertEqual(
+            LaunchArgumentMerger.merge(["-flag"], ["-flag"]),
+            ["-flag"]
+        )
+    }
+
     func testTypedDependencyPlanContainsNoExecutableScript() throws {
         let profile = CompatibilityProfile(
             id: "typed",
@@ -268,6 +310,60 @@ final class CompatibilityFoundationTests: XCTestCase {
             ),
             BundledCompatibilityProfiles.steam.id
         )
+    }
+
+    func testDiscoveryReplacesMismatchedBundledSteamProfileWithGameProfile() {
+        let matcher = CompatibilityProfileMatcher()
+        let application = LibraryApplication(
+            environmentID: UUID(),
+            name: "Cash Cleaner Simulator",
+            providerID: "steam",
+            providerItemID: "2488370"
+        )
+
+        XCTAssertEqual(
+            matcher.profileIDForDiscovery(
+                existingSelection: BundledCompatibilityProfiles.steam.id,
+                application: application,
+                executableURL: URL(filePath: "/tmp/steam.exe"),
+                profiles: BundledCompatibilityProfiles.all
+            ),
+            BundledCompatibilityProfiles.cashCleanerSimulator.id
+        )
+    }
+
+    func testCompatibilityProfileRequiresExactDXMTRevision() throws {
+        let revision = "3525d41c71604ed07d796de5b58560e3cf6db944"
+        let profile = CompatibilityProfile(
+            id: "exact-dxmt",
+            displayName: "Exact DXMT",
+            matchRules: [],
+            requiredEngineFamily: .wineStaging,
+            requiredDXMTRevision: revision
+        )
+        let environment = WindowsEnvironment(
+            name: "Game",
+            prefixURL: URL(filePath: "/tmp/StillExactDXMT")
+        )
+        let registry = makeRegistry(
+            engineCapabilities: [],
+            componentCapabilities: []
+        )
+
+        XCTAssertThrowsError(try CompatibilityResolver().resolve(
+            environment: environment,
+            profile: profile,
+            engineFamily: .wineStaging,
+            engineDXMTRevision: "different",
+            registry: registry
+        ))
+        XCTAssertNoThrow(try CompatibilityResolver().resolve(
+            environment: environment,
+            profile: profile,
+            engineFamily: .wineStaging,
+            engineDXMTRevision: revision,
+            registry: registry
+        ))
     }
 
     func testEnginePinChangeRequiresStopApprovalAndRestorePoint() async throws {

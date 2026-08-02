@@ -60,7 +60,6 @@ final class ApplicationRecipeTests: XCTestCase {
                 executableURL: URL(filePath: "/tmp/steam/steam.exe")
             ),
             [
-                "DXMT_CONFIG": "d3d11.preferredMaxFrameRate=72;",
                 "STILL_STEAM_CEF_RAW_ANGLE": "1",
                 "WINEMAC_REMOTE_METAL_MODE": "stable"
             ]
@@ -85,27 +84,15 @@ final class ApplicationRecipeTests: XCTestCase {
         )
     }
 
-    func testVerifiedGameProfilesUseDXMTAndReducedRenderResolution() {
+    func testVerifiedGameProfilesDoNotApplyUnmeasuredPerformanceTuning() {
         let cashCleaner = BundledCompatibilityProfiles.cashCleanerSimulator
         let supermarketChaos = BundledCompatibilityProfiles.supermarketChaos
 
         XCTAssertEqual(cashCleaner.requiredEngineFamily, .wineStaging)
         XCTAssertEqual(cashCleaner.recommendedSettings.graphicsBackend, .dxmt)
-        XCTAssertEqual(
-            cashCleaner.recommendedSettings.launchArguments,
-            ["-dx11", "-ResX=1920", "-ResY=1080", "-NoVSync"]
-        )
+        XCTAssertEqual(cashCleaner.recommendedSettings.launchArguments, [])
         XCTAssertEqual(supermarketChaos.requiredEngineFamily, .wineStaging)
         XCTAssertEqual(supermarketChaos.recommendedSettings.graphicsBackend, .dxmt)
-        XCTAssertEqual(
-            supermarketChaos.recommendedSettings.launchArguments,
-            [
-                "-force-d3d11",
-                "-force-d3d11-no-singlethreaded",
-                "-screen-width", "1920",
-                "-screen-height", "1080",
-                "-screen-fullscreen", "1"
-            ]
-        )
+        XCTAssertEqual(supermarketChaos.recommendedSettings.launchArguments, [])
     }
 }

@@ -18,7 +18,8 @@ struct StillCLI {
         let rootURL = rootURL(from: arguments)
         let store = JSONStillStore(rootURL: rootURL)
         let frozenLegacyMutations: Set<String> = [
-            "create", "setup-steam", "pin-app", "unpin-app", "set-engine"
+            "create", "setup-steam", "pin-app", "unpin-app", "set-engine",
+            "adopt-managed-runtime"
         ]
         if frozenLegacyMutations.contains(command) {
             throw CLIError.legacyMutationFrozen(command)
@@ -86,58 +87,7 @@ struct StillCLI {
             print("Installed \(descriptor.displayName)")
             print("Wine: \(descriptor.wineBinaryURL.path)")
         case "adopt-managed-runtime":
-            guard arguments.count >= 4,
-                  let environmentID = UUID(uuidString: arguments[1]) else {
-                throw CLIError.missingRuntimeAdoptionArguments
-            }
-            guard arguments.contains("--approved"),
-                  arguments.contains("--source-retained") else {
-                throw CLIError.runtimeAdoptionNotApproved
-            }
-            guard var environment = try await store.environment(id: environmentID) else {
-                throw CLIError.environmentNotFound(arguments[1])
-            }
-            let sourcePrefixURL = environment.prefixURL
-            let engineID = arguments[3]
-            let ownershipService = EnvironmentOwnershipService(
-                managedRootURL: rootURL.appending(path: "Environments", directoryHint: .isDirectory)
-            )
-            let managedPrefixURL = URL(filePath: arguments[2], directoryHint: .isDirectory)
-            guard managedPrefixURL.standardizedFileURL.path
-                == ownershipService.managedPrefixURL(for: environmentID).standardizedFileURL.path else {
-                throw CLIError.unexpectedManagedRuntimePath
-            }
-            environment.prefixURL = managedPrefixURL
-            environment.pinnedEngineBuildID = engineID
-            environment.provisionedEngineBuildID = engineID
-            environment.graphicsBackend = .dxmt
-            environment.windowsVersion = .windows10
-            environment.enhancedSync = .automatic
-            environment.ownership = .managed
-            environment.managementNonce = UUID()
-            environment.updatedAt = .now
-            try ownershipService.writeMarker(
-                for: environment,
-                storeIdentifier: try await store.load().storeIdentifier
-            )
-            do {
-                try await store.commitManagedRuntimeReplacement(
-                    environment: environment,
-                    expectedSourcePrefixURL: sourcePrefixURL,
-                    activeSessions: [],
-                    userApproved: true,
-                    sourcePrefixRetained: true
-                )
-            } catch {
-                try? FileManager.default.removeItem(
-                    at: managedPrefixURL.appending(
-                        path: EnvironmentOwnershipService.markerFilename
-                    )
-                )
-                throw error
-            }
-            print("Adopted managed runtime for \(environment.name)")
-            print("Source retained: \(sourcePrefixURL.path)")
+            throw CLIError.legacyMutationFrozen(command)
         case "scan-apps":
             let environments = try await store.environments()
             let selected: [WindowsEnvironment]
@@ -225,7 +175,7 @@ struct StillCLI {
               install-engine-archive <id> <path>
                                     Verify and install a local engine archive.
               adopt-managed-runtime <environment-id> <managed-prefix> <engine-id>
-                                    Replace an Environment runtime after its files are prepared.
+                                    Temporarily unavailable until live-process locking is enforced.
               setup-steam <local-exe>
                                     Temporarily unavailable during store migration.
               scan-apps [environment-id]

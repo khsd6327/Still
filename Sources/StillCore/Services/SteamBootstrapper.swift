@@ -17,8 +17,6 @@ public struct SteamBootstrapResult: Sendable {
 }
 
 public actor SteamBootstrapper {
-    public static let dxmtFramePacing = "d3d11.preferredMaxFrameRate=72;"
-
     public static let softwareRenderingLaunchArguments = [
         "-cef-disable-gpu",
         "-cef-disable-gpu-compositing"
@@ -44,15 +42,31 @@ public actor SteamBootstrapper {
         for bottle: Bottle,
         executableURL: URL
     ) -> [String: String] {
+        compatibilitySettings(
+            for: bottle,
+            executableURL: executableURL
+        ).environmentVariables
+    }
+
+    public static func compatibilitySettings(
+        for bottle: Bottle,
+        executableURL: URL
+    ) -> CompatibilitySettings {
         guard bottle.graphicsBackend == .dxmt,
               isSteamClientExecutable(executableURL) else {
-            return [:]
+            return CompatibilitySettings(
+                launchArguments: isSteamClientExecutable(executableURL)
+                    ? launchArguments(for: bottle)
+                    : []
+            )
         }
-        return [
-            "DXMT_CONFIG": dxmtFramePacing,
-            "STILL_STEAM_CEF_RAW_ANGLE": "1",
-            "WINEMAC_REMOTE_METAL_MODE": "stable"
-        ]
+        return CompatibilitySettings(
+            environmentVariables: [
+                "STILL_STEAM_CEF_RAW_ANGLE": "1",
+                "WINEMAC_REMOTE_METAL_MODE": "stable"
+            ],
+            launchArguments: launchArguments(for: bottle)
+        )
     }
 
     public static func isSteamClientExecutable(_ executableURL: URL) -> Bool {

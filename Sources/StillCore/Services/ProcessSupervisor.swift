@@ -11,7 +11,6 @@ public actor ProcessSupervisor {
 
     private var processes: [LaunchSession.ID: ManagedProcess] = [:]
     private var completedSessions: [LaunchSession.ID: LaunchSession] = [:]
-    private var completedTerminationPlans: [LaunchSession.ID: ProcessTerminationPlan] = [:]
     private let fileManager: FileManager
 
     public init(fileManager: FileManager = .default) {
@@ -119,14 +118,6 @@ public actor ProcessSupervisor {
     private func terminate(sessionID: LaunchSession.ID, force: Bool) throws {
         reapTerminatedProcesses()
         guard var managed = processes[sessionID] else {
-            if let terminationPlan = completedTerminationPlans[sessionID] {
-                try runTerminationPlan(
-                    terminationPlan,
-                    force: force,
-                    logURL: completedSessions[sessionID]?.logURL
-                )
-                return
-            }
             throw StillCoreError.sessionNotFound(sessionID)
         }
         guard managed.session.state == .running else {
@@ -165,8 +156,7 @@ public actor ProcessSupervisor {
 
     private func terminateAll(force: Bool) {
         reapTerminatedProcesses()
-        let ids = Set(processes.keys).union(completedTerminationPlans.keys)
-        for id in ids {
+        for id in Array(processes.keys) {
             try? terminate(sessionID: id, force: force)
         }
     }
@@ -276,9 +266,6 @@ public actor ProcessSupervisor {
                 )
             }
             completedSessions[id] = managed.session
-            if let terminationPlan = managed.terminationPlan {
-                completedTerminationPlans[id] = terminationPlan
-            }
             try? managed.logHandle.close()
         }
     }

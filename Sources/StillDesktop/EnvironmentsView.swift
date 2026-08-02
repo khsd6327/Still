@@ -46,6 +46,9 @@ struct EnvironmentsView: View {
                         Button("Create Restore Point") {
                             Task { await model.createRestorePoint(for: environment) }
                         }
+                        Button("Restore Latest Restore Point…") {
+                            Task { await model.prepareLatestRestorePoint(for: environment) }
+                        }
                         Button("Duplicate Environment") {
                             Task { await model.duplicate(environment) }
                         }
@@ -94,6 +97,9 @@ struct EnvironmentsView: View {
                     Divider()
                     Button("Create Restore Point") {
                         Task { await model.createRestorePoint(for: environment) }
+                    }
+                    Button("Restore Latest Restore Point…") {
+                        Task { await model.prepareLatestRestorePoint(for: environment) }
                     }
                     Button("Duplicate Environment") {
                         Task { await model.duplicate(environment) }
@@ -145,6 +151,23 @@ struct EnvironmentsView: View {
             Button("Cancel", role: .cancel) { model.pendingEnvironmentRemoval = nil }
         } message: {
             Text("Still will remove this Environment and its Library entries. Files at the registered path will remain unchanged.")
+        }
+        .confirmationDialog(
+            "Restore \(model.pendingRestorePointRestore?.environmentName ?? "Environment")?",
+            isPresented: Binding(
+                get: { model.pendingRestorePointRestore != nil },
+                set: { if !$0 { model.pendingRestorePointRestore = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Restore", role: .destructive) {
+                Task { await model.confirmRestorePoint() }
+            }
+            Button("Cancel", role: .cancel) { model.pendingRestorePointRestore = nil }
+        } message: {
+            if let point = model.pendingRestorePointRestore {
+                Text("The current Environment files and Library configuration will be replaced with the Restore Point from \(point.createdAt.formatted(date: .abbreviated, time: .shortened)).")
+            }
         }
         .alert(
             "Permanently delete \(model.deletionPreview?.environmentName ?? "Environment")?",

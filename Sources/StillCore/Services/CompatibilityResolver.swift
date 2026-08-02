@@ -6,9 +6,12 @@ public struct CompatibilityResolver: Sendable {
     public func resolve(
         environment: WindowsEnvironment,
         profile: CompatibilityProfile? = nil,
+        runtimePolicySettings: CompatibilitySettings = CompatibilitySettings(),
+        runtimePolicyID: String = "runtime",
         applicationOverrides: CompatibilitySettings = CompatibilitySettings(),
         launchOverrides: CompatibilitySettings = CompatibilitySettings(),
         engineFamily: EngineFamily? = nil,
+        engineDXMTRevision: String? = nil,
         registry: CapabilityRegistry
     ) throws -> EffectiveCompatibility {
         if let profile {
@@ -19,6 +22,12 @@ public struct CompatibilityResolver: Sendable {
                 )
             }
             try registry.require(profile.requiredCapabilities)
+            if let requiredRevision = profile.requiredDXMTRevision,
+               engineDXMTRevision != requiredRevision {
+                throw StillCoreError.invalidCompatibilityConfiguration(
+                    "Profile '\(profile.id)' requires DXMT revision '\(requiredRevision)'."
+                )
+            }
         }
 
         var windowsVersion = SourcedValue(
@@ -63,6 +72,16 @@ public struct CompatibilityResolver: Sendable {
                 argumentSource: &argumentSource
             )
         }
+        apply(
+            runtimePolicySettings,
+            source: .runtimePolicy(runtimePolicyID),
+            windowsVersion: &windowsVersion,
+            graphicsBackend: &graphicsBackend,
+            enhancedSync: &enhancedSync,
+            variables: &variables,
+            arguments: &arguments,
+            argumentSource: &argumentSource
+        )
         apply(
             applicationOverrides,
             source: .applicationOverride,
@@ -122,5 +141,63 @@ public struct CompatibilityResolver: Sendable {
             arguments = settings.launchArguments
             argumentSource = source
         }
+    }
+}
+
+public enum LaunchArgumentMerger {
+    private struct Unit {
+        let key: String?
+        let tokens: [String]
+    }
+
+    private static let pairedOptions: Set<String> = [
+        "-applaunch",
+        "-screen-width",
+        "-screen-height",
+        "-screen-fullscreen",
+        "-resx",
+        "-resy"
+    ]
+
+    public static func merge(_ base: [String], _ additions: [String]) -> [String] {
+        var units = parse(base)
+        for addition in parse(additions) {
+            if let key = addition.key {
+                units.removeAll { $0.key == key }
+            }
+            units.append(addition)
+        }
+        return units.flatMap(\.tokens)
+    }
+
+    private static func parse(_ arguments: [String]) -> [Unit] {
+        var result: [Unit] = []
+        var index = 0
+        while index < arguments.count {
+            let argument = arguments[index]
+            guard let key = optionKey(argument) else {
+                result.append(Unit(key: nil, tokens: [argument]))
+                index += 1
+                continue
+            }
+            if pairedOptions.contains(key),
+               !argument.contains("="),
+               index + 1 < arguments.count {
+                result.append(Unit(
+                    key: key,
+                    tokens: [argument, arguments[index + 1]]
+                ))
+                index += 2
+            } else {
+                result.append(Unit(key: key, tokens: [argument]))
+                index += 1
+            }
+        }
+        return result
+    }
+
+    private static func optionKey(_ argument: String) -> String? {
+        guard argument.hasPrefix("-") || argument.hasPrefix("/") else { return nil }
+        return String(argument.split(separator: "=", maxSplits: 1)[0]).lowercased()
     }
 }

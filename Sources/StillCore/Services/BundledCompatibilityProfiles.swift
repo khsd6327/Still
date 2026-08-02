@@ -1,6 +1,8 @@
 import Foundation
 
 public enum BundledCompatibilityProfiles {
+    public static let verifiedDXMTRevision = "3525d41c71604ed07d796de5b58560e3cf6db944"
+
     public static let steam = CompatibilityProfile(
         id: "valve-steam-preview",
         displayName: "Steam Client (Preview)",
@@ -12,6 +14,7 @@ public enum BundledCompatibilityProfiles {
             )
         ],
         requiredEngineFamily: .wineStaging,
+        requiredDXMTRevision: verifiedDXMTRevision,
         requiredCapabilities: [.win64, .dxmt, .dxmtBridge],
         recommendedSettings: CompatibilitySettings(
             windowsVersion: .windows10,
@@ -32,17 +35,12 @@ public enum BundledCompatibilityProfiles {
             )
         ],
         requiredEngineFamily: .wineStaging,
+        requiredDXMTRevision: verifiedDXMTRevision,
         requiredCapabilities: [.win64, .dxmt, .dxmtBridge],
         recommendedSettings: CompatibilitySettings(
             windowsVersion: .windows10,
             graphicsBackend: .dxmt,
-            enhancedSync: .automatic,
-            launchArguments: [
-                "-dx11",
-                "-ResX=1920",
-                "-ResY=1080",
-                "-NoVSync"
-            ]
+            enhancedSync: .automatic
         )
     )
 
@@ -57,18 +55,12 @@ public enum BundledCompatibilityProfiles {
             )
         ],
         requiredEngineFamily: .wineStaging,
+        requiredDXMTRevision: verifiedDXMTRevision,
         requiredCapabilities: [.win64, .dxmt, .dxmtBridge],
         recommendedSettings: CompatibilitySettings(
             windowsVersion: .windows10,
             graphicsBackend: .dxmt,
-            enhancedSync: .automatic,
-            launchArguments: [
-                "-force-d3d11",
-                "-force-d3d11-no-singlethreaded",
-                "-screen-width", "1920",
-                "-screen-height", "1080",
-                "-screen-fullscreen", "1"
-            ]
+            enhancedSync: .automatic
         )
     )
 
