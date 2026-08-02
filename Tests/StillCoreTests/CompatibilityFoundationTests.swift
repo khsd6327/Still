@@ -486,6 +486,41 @@ final class CompatibilityFoundationTests: XCTestCase {
         XCTAssertEqual(reloaded.engineBuilds, [recorded])
     }
 
+    func testInstalledEngineBuildSynchronizationUpgradesLegacyLocalManifestIdentity() async throws {
+        let rootURL = FileManager.default.temporaryDirectory
+            .appending(path: "StillEngineManifestUpgradeTests")
+            .appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: rootURL) }
+        let installURL = rootURL.appending(path: "Engine/bin")
+        let legacy = EngineBuild(
+            id: "local-dxmt",
+            family: .wineStaging,
+            displayName: "Local DXMT",
+            version: "11.14",
+            installURL: installURL,
+            capabilities: [.win64, .dxmt],
+            artifactManifestSHA256: String(repeating: "a", count: 64)
+        )
+        let upgraded = EngineBuild(
+            id: legacy.id,
+            family: legacy.family,
+            displayName: legacy.displayName,
+            version: legacy.version,
+            wineVersion: "11.14",
+            dxmtRevision: "3525d41c71604ed07d796de5b58560e3cf6db944",
+            installURL: installURL,
+            capabilities: legacy.capabilities,
+            artifactManifestSHA256: String(repeating: "b", count: 64)
+        )
+        let store = JSONStillStore(rootURL: rootURL)
+        try await store.save(StillStoreDocument(engineBuilds: [legacy]))
+
+        try await store.synchronizeInstalledEngineBuilds([upgraded])
+
+        let reloaded = try await store.load()
+        XCTAssertEqual(reloaded.engineBuilds, [upgraded])
+    }
+
     func testManagedRuntimeReplacementRemapsEntriesAndRetainsSource() async throws {
         let rootURL = FileManager.default.temporaryDirectory
             .appending(path: "StillRuntimeReplacementTests")

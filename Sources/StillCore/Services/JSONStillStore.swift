@@ -176,13 +176,21 @@ public actor JSONStillStore {
                 guard stored != build else { continue }
                 if stored.sourceArchiveSHA256 != nil
                     || stored.artifactManifestSHA256 != nil {
-                    guard stored.family == build.family,
-                          stored.version == build.version,
-                          stored.installURL == build.installURL,
-                          stored.capabilities == build.capabilities,
-                          stored.sourceArchiveSHA256 == build.sourceArchiveSHA256,
-                          stored.artifactManifestSHA256
-                            == build.artifactManifestSHA256 else {
+                    let coreIdentityMatches = stored.family == build.family
+                        && stored.version == build.version
+                        && stored.installURL == build.installURL
+                        && stored.capabilities == build.capabilities
+                        && stored.sourceArchiveSHA256 == build.sourceArchiveSHA256
+                    let isVerifiedLocalManifestUpgrade = coreIdentityMatches
+                        && stored.sourceArchiveSHA256 == nil
+                        && stored.wineVersion == nil
+                        && stored.dxmtRevision == nil
+                        && build.wineVersion?.isEmpty == false
+                        && build.dxmtRevision?.isEmpty == false
+                        && build.artifactManifestSHA256 != nil
+                    guard coreIdentityMatches,
+                          stored.artifactManifestSHA256 == build.artifactManifestSHA256
+                            || isVerifiedLocalManifestUpgrade else {
                         throw StillCoreError.verificationFailed(
                             "Installed engine '\(build.id)' no longer matches its recorded build."
                         )
