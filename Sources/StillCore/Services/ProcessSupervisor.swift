@@ -31,6 +31,18 @@ public actor ProcessSupervisor {
         var managed = try makeManagedProcess(plan)
         try managed.session.transition(to: .launching)
         do {
+            if let terminationPlan = managed.terminationPlan,
+               let monitorExecutableURL = terminationPlan.monitorExecutableURL,
+               !terminationPlan.monitorPrepareArguments.isEmpty {
+                try runAndWait(
+                    executableURL: monitorExecutableURL,
+                    arguments: terminationPlan.monitorPrepareArguments,
+                    environment: terminationPlan.environment,
+                    workingDirectoryURL: terminationPlan.workingDirectoryURL,
+                    logHandle: managed.logHandle,
+                    acceptedExitCodes: terminationPlan.acceptedExitCodes
+                )
+            }
             try managed.process.run()
             if let terminationPlan = managed.terminationPlan,
                let monitorExecutableURL = terminationPlan.monitorExecutableURL {
@@ -169,9 +181,39 @@ public actor ProcessSupervisor {
 
     private func terminateAll(force: Bool) {
         reapTerminatedProcesses()
-        for id in Array(processes.keys) {
+        let scopedPlans = Dictionary(grouping: processes.compactMap { id, managed in
+            managed.terminationPlan.map { (id, $0) }
+        }) { _, plan in
+            plan.scopeIdentifier
+        }
+        var handledIDs = Set<LaunchSession.ID>()
+
+        for (_, scopedEntries) in scopedPlans {
+            guard let plan = scopedEntries.first?.1 else { continue }
+            do {
+                try runTerminationPlan(
+                    plan,
+                    force: force,
+                    logURL: scopedEntries.first.flatMap { processes[$0.0]?.session.logURL },
+                    respectHostProcessScope: false
+                )
+                for (id, _) in scopedEntries {
+                    guard var managed = processes[id], managed.session.state == .running else {
+                        continue
+                    }
+                    try managed.session.transition(to: .stopping)
+                    processes[id] = managed
+                    handledIDs.insert(id)
+                }
+            } catch {
+                continue
+            }
+        }
+
+        for id in Array(processes.keys) where !handledIDs.contains(id) {
             try? terminate(sessionID: id, force: force)
         }
+        reapTerminatedProcesses()
     }
 
     private func validate(_ plan: ProcessPlan) throws {
@@ -231,9 +273,11 @@ public actor ProcessSupervisor {
     private func runTerminationPlan(
         _ plan: ProcessTerminationPlan,
         force: Bool,
-        logURL: URL?
+        logURL: URL?,
+        respectHostProcessScope: Bool = true
     ) throws {
-        if let hostProcessPathPrefix = plan.hostProcessPathPrefix {
+        if respectHostProcessScope,
+           let hostProcessPathPrefix = plan.hostProcessPathPrefix {
             _ = try HostProcessTerminator.terminateProcesses(
                 matchingWindowsPathPrefix: hostProcessPathPrefix,
                 force: force
@@ -264,6 +308,31 @@ public actor ProcessSupervisor {
         try process.run()
         process.waitUntilExit()
         guard plan.acceptedExitCodes.contains(process.terminationStatus) else {
+            throw StillCoreError.processFailed(process.terminationStatus)
+        }
+    }
+
+    private func runAndWait(
+        executableURL: URL,
+        arguments: [String],
+        environment: [String: String],
+        workingDirectoryURL: URL?,
+        logHandle: FileHandle,
+        acceptedExitCodes: Set<Int32>
+    ) throws {
+        guard fileManager.isExecutableFile(atPath: executableURL.path) else {
+            throw StillCoreError.engineBinaryUnavailable(executableURL)
+        }
+        let process = makeProcess(
+            executableURL: executableURL,
+            arguments: arguments,
+            environment: environment,
+            workingDirectoryURL: workingDirectoryURL,
+            logHandle: logHandle
+        )
+        try process.run()
+        process.waitUntilExit()
+        guard acceptedExitCodes.contains(process.terminationStatus) else {
             throw StillCoreError.processFailed(process.terminationStatus)
         }
     }

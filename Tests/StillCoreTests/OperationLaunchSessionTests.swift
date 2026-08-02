@@ -155,6 +155,40 @@ final class OperationLaunchSessionTests: XCTestCase {
         XCTAssertTrue(isEmpty)
     }
 
+    func testForceStopAllUsesPrefixTerminationInsteadOfApplicationPathScope() async throws {
+        let rootURL = temporaryRoot("PrefixForceStopAll")
+        defer { try? FileManager.default.removeItem(at: rootURL) }
+        try FileManager.default.createDirectory(at: rootURL, withIntermediateDirectories: true)
+        let markerURL = rootURL.appending(path: "prefix-stopped")
+        let termination = ProcessTerminationPlan(
+            scopeIdentifier: rootURL.path,
+            hostProcessPathPrefix: "C:\\Games\\One\\",
+            gracefulExecutableURL: URL(filePath: "/usr/bin/touch"),
+            gracefulArguments: [markerURL.path],
+            forceExecutableURL: URL(filePath: "/usr/bin/touch"),
+            forceArguments: [markerURL.path],
+            environment: [:],
+            workingDirectoryURL: rootURL,
+            acceptedExitCodes: [0]
+        )
+        let supervisor = ProcessSupervisor()
+        _ = try await supervisor.launch(ProcessPlan(
+            applicationID: UUID(),
+            environmentID: UUID(),
+            executableURL: URL(filePath: "/bin/sleep"),
+            arguments: ["0.1"],
+            logURL: rootURL.appending(path: "launch.log"),
+            terminationPlan: termination
+        ))
+
+        await supervisor.forceStopAll()
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: markerURL.path))
+        try await Task.sleep(for: .milliseconds(150))
+        let activeSessions = await supervisor.activeSessions()
+        XCTAssertTrue(activeSessions.isEmpty)
+    }
+
     func testWineTerminationMarksEverySessionInThePrefixStopping() async throws {
         let rootURL = temporaryRoot("WineScope")
         defer { try? FileManager.default.removeItem(at: rootURL) }
@@ -283,6 +317,43 @@ final class OperationLaunchSessionTests: XCTestCase {
             XCTAssertEqual(error, .sessionNotFound(session.id))
         }
         XCTAssertFalse(FileManager.default.fileExists(atPath: markerURL.path))
+    }
+
+    func testMonitorPreparationRunsBeforeAsynchronousSessionMonitor() async throws {
+        let rootURL = temporaryRoot("MonitorPreparation")
+        defer { try? FileManager.default.removeItem(at: rootURL) }
+        try FileManager.default.createDirectory(at: rootURL, withIntermediateDirectories: true)
+        let markerURL = rootURL.appending(path: "prepared")
+        let monitorScript = "test -f \"$1\" && sleep 0.2"
+        let termination = ProcessTerminationPlan(
+            scopeIdentifier: rootURL.path,
+            gracefulExecutableURL: URL(filePath: "/usr/bin/true"),
+            gracefulArguments: [],
+            forceExecutableURL: URL(filePath: "/usr/bin/true"),
+            forceArguments: [],
+            monitorExecutableURL: URL(filePath: "/bin/sh"),
+            monitorPrepareArguments: ["-c", "touch \"$1\"", "prepare", markerURL.path],
+            monitorArguments: ["-c", monitorScript, "monitor", markerURL.path],
+            environment: [:],
+            workingDirectoryURL: rootURL,
+            acceptedExitCodes: [0]
+        )
+        let supervisor = ProcessSupervisor()
+        let session = try await supervisor.launch(ProcessPlan(
+            applicationID: UUID(),
+            environmentID: UUID(),
+            executableURL: URL(filePath: "/usr/bin/true"),
+            arguments: [],
+            logURL: rootURL.appending(path: "launch.log"),
+            terminationPlan: termination
+        ))
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: markerURL.path))
+        let runningState = await supervisor.session(id: session.id)?.state
+        XCTAssertEqual(runningState, .running)
+        try await Task.sleep(for: .milliseconds(250))
+        let activeSessions = await supervisor.activeSessions()
+        XCTAssertTrue(activeSessions.isEmpty)
     }
 
     private func temporaryRoot(_ name: String) -> URL {

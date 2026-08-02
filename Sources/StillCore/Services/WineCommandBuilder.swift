@@ -42,10 +42,12 @@ public enum WineCommandBuilder {
                 monitorExecutableURL: engine.wineBinaryURL
                     .deletingLastPathComponent()
                     .appending(path: "wineserver"),
+                monitorPrepareArguments: ["-p5"],
                 monitorArguments: ["-w"],
                 environment: environment,
                 workingDirectoryURL: request.bottle.prefixURL
-            )
+            ),
+            runtimeEvidence: request.runtimeEvidence
         )
     }
 

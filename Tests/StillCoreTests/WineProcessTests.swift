@@ -49,6 +49,7 @@ final class WineProcessTests: XCTestCase {
             plan.terminationPlan?.monitorExecutableURL,
             URL(filePath: "/opt/wine/bin/wineserver")
         )
+        XCTAssertEqual(plan.terminationPlan?.monitorPrepareArguments, ["-p5"])
         XCTAssertEqual(plan.terminationPlan?.monitorArguments, ["-w"])
     }
 
