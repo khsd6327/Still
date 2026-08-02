@@ -51,6 +51,67 @@ final class RecoverySafetyTests: XCTestCase {
         XCTAssertEqual(retainedCount, 1)
     }
 
+    func testRestorePointRestoresPrefixAndConfigurationTogether() async throws {
+        let root = temporaryRoot("RestorePointTransaction")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let prefix = root.appending(path: "Prefix")
+        let registryURL = prefix.appending(path: "system.reg")
+        try write("before", to: registryURL)
+        let environment = WindowsEnvironment(
+            name: "Game",
+            prefixURL: prefix,
+            graphicsBackend: .wineD3D
+        )
+        let application = LibraryApplication(
+            environmentID: environment.id,
+            name: "Game"
+        )
+        let entry = LaunchEntry(
+            applicationID: application.id,
+            executableURL: prefix.appending(path: "drive_c/Game/game.exe")
+        )
+        var storedApplication = application
+        storedApplication.launchEntryIDs = [entry.id]
+        let store = JSONStillStore(rootURL: root.appending(path: "Store"))
+        try await store.save(StillStoreDocument(
+            environments: [environment],
+            applications: [storedApplication],
+            launchEntries: [entry]
+        ))
+        let service = RestorePointService(rootURL: root.appending(path: "Points"))
+        let point = try await service.create(
+            environment: environment,
+            applications: [storedApplication],
+            launchEntries: [entry],
+            activeSessions: []
+        )
+
+        try Data("after".utf8).write(to: registryURL)
+        var changedEnvironment = environment
+        changedEnvironment.graphicsBackend = .dxmt
+        changedEnvironment.updatedAt = Date(timeIntervalSince1970: 1_000)
+        try await store.saveEnvironment(changedEnvironment)
+
+        _ = try await service.restore(
+            id: point.id,
+            environment: changedEnvironment,
+            activeSessions: [],
+            store: store
+        )
+
+        XCTAssertEqual(try String(contentsOf: registryURL, encoding: .utf8), "before")
+        let restoredDocument = try await store.load()
+        XCTAssertEqual(
+            restoredDocument.environments.first(where: { $0.id == environment.id })?.graphicsBackend,
+            .wineD3D
+        )
+        XCTAssertEqual(restoredDocument.applications, [storedApplication])
+        XCTAssertEqual(restoredDocument.launchEntries, [entry])
+        XCTAssertFalse(try FileManager.default.contentsOfDirectory(
+            atPath: root.path
+        ).contains(where: { $0.hasPrefix(".still-restore-") }))
+    }
+
     func testStandardBackupExcludesSensitiveDataAndEngineBinaries() async throws {
         let root = temporaryRoot("Backup")
         defer { try? FileManager.default.removeItem(at: root) }
@@ -93,6 +154,57 @@ final class RecoverySafetyTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(
             atPath: restored.appending(path: "Engines/engine/bin/wine").path
         ))
+    }
+
+    func testBackupPreservesWineDriveSymlinksIncludingRootAndBrokenTargets() async throws {
+        let root = temporaryRoot("BackupSymlinks")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let prefix = root.appending(path: "Prefix")
+        try write("registry", to: prefix.appending(path: "system.reg"))
+        try FileManager.default.createDirectory(
+            at: prefix.appending(path: "drive_c"),
+            withIntermediateDirectories: true
+        )
+        let dosdevices = prefix.appending(path: "dosdevices")
+        try FileManager.default.createDirectory(at: dosdevices, withIntermediateDirectories: true)
+        let links = [
+            "c:": "../drive_c",
+            "z:": "/",
+            "d:": "/Volumes/Still-Missing-Drive"
+        ]
+        for (name, target) in links {
+            try FileManager.default.createSymbolicLink(
+                atPath: dosdevices.appending(path: name).path,
+                withDestinationPath: target
+            )
+        }
+        let environment = WindowsEnvironment(name: "Wine", prefixURL: prefix)
+        let backupURL = root.appending(path: "Wine.stillbackup")
+        let service = BackupService()
+        let preview = try await service.preview(
+            environment: environment,
+            applications: [],
+            launchEntries: [],
+            components: [],
+            destinationURL: backupURL,
+            encrypted: false
+        )
+        XCTAssertEqual(preview.manifest.fileCount, 4)
+        try await service.create(preview: preview, activeSessions: [])
+
+        let restored = root.appending(path: "Restored")
+        _ = try await service.restore(
+            backupURL: backupURL,
+            destinationPrefixURL: restored
+        )
+        for (name, target) in links {
+            XCTAssertEqual(
+                try FileManager.default.destinationOfSymbolicLink(
+                    atPath: restored.appending(path: "dosdevices/\(name)").path
+                ),
+                target
+            )
+        }
     }
 
     func testEncryptedBackupRequiresCorrectPassword() async throws {

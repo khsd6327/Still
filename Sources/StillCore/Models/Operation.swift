@@ -3,12 +3,15 @@ import Foundation
 public enum OperationKind: String, Codable, CaseIterable, Sendable {
     case createEnvironment
     case importEnvironment
+    case launchApplication
     case launchInstaller
     case installApplication
     case installComponent
     case repair
     case duplicateEnvironment
     case createRestorePoint
+    case restoreRestorePoint
+    case changeEngine
     case backup
     case restore
     case deleteEnvironment

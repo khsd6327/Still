@@ -34,34 +34,41 @@ public actor RestorePointService {
             .appending(path: environment.id.uuidString, directoryHint: .isDirectory)
             .appending(path: id.uuidString, directoryHint: .isDirectory)
         let prefixURL = pointURL.appending(path: "Prefix", directoryHint: .isDirectory)
-        let usedClone = try FileTreeServices.verifiedCopy(
-            from: environment.prefixURL,
-            to: prefixURL
-        )
-        let entries = try FileTreeServices.entries(at: prefixURL)
-        let snapshot = ConfigurationSnapshot(
-            environment: environment,
-            applications: applications,
-            launchEntries: launchEntries
-        )
-        let manifest = RestorePointManifest(
-            id: id,
-            environmentID: environment.id,
-            environmentName: environment.name,
-            createdAt: .now,
-            snapshot: snapshot,
-            requiredEngineBuildID: environment.pinnedEngineBuildID,
-            affectedApplicationIDs: snapshot.applications.map(\.id),
-            fileCount: entries.count,
-            byteCount: entries.reduce(0) { $0 + $1.byteCount },
-            usedCloneCopy: usedClone,
-            isProtected: false
-        )
-        try encoder.encode(manifest).write(
-            to: pointURL.appending(path: "manifest.json"),
-            options: .atomic
-        )
-        return manifest
+        do {
+            let usedClone = try FileTreeServices.verifiedCopy(
+                from: environment.prefixURL,
+                to: prefixURL
+            )
+            let entries = try FileTreeServices.entries(at: prefixURL)
+            let snapshot = ConfigurationSnapshot(
+                environment: environment,
+                applications: applications,
+                launchEntries: launchEntries
+            )
+            let manifest = RestorePointManifest(
+                id: id,
+                environmentID: environment.id,
+                environmentName: environment.name,
+                createdAt: .now,
+                snapshot: snapshot,
+                requiredEngineBuildID: environment.pinnedEngineBuildID,
+                affectedApplicationIDs: snapshot.applications.map(\.id),
+                fileCount: entries.count,
+                byteCount: entries.reduce(0) { $0 + $1.byteCount },
+                usedCloneCopy: usedClone,
+                isProtected: false
+            )
+            try encoder.encode(manifest).write(
+                to: pointURL.appending(path: "manifest.json"),
+                options: .atomic
+            )
+            return manifest
+        } catch {
+            if fileManager.fileExists(atPath: pointURL.path) {
+                try? fileManager.removeItem(at: pointURL)
+            }
+            throw error
+        }
     }
 
     public func manifests(
@@ -89,6 +96,98 @@ public actor RestorePointService {
             throw StillCoreError.invalidStore("Restore Point '\(id)' was not found.")
         }
         return manifest
+    }
+
+    public func restore(
+        id: UUID,
+        environment: WindowsEnvironment,
+        activeSessions: [LaunchSession],
+        store: JSONStillStore
+    ) async throws -> RestorePointManifest {
+        try requireStopped(environment.id, sessions: activeSessions)
+        let manifest = try previewRestore(id: id, environmentID: environment.id)
+        guard manifest.snapshot.environmentID == environment.id else {
+            throw StillCoreError.invalidStore(
+                "The Restore Point belongs to a different Environment."
+            )
+        }
+
+        let document = try await store.load()
+        guard document.environments.first(where: { $0.id == environment.id }) == environment else {
+            throw StillCoreError.invalidStore(
+                "The Environment changed before its Restore Point could be restored."
+            )
+        }
+        if let requiredEngineBuildID = manifest.requiredEngineBuildID,
+           !document.engineBuilds.contains(where: { $0.id == requiredEngineBuildID }) {
+            throw StillCoreError.engineNotFound(requiredEngineBuildID)
+        }
+
+        let pointPrefixURL = rootURL
+            .appending(path: environment.id.uuidString, directoryHint: .isDirectory)
+            .appending(path: id.uuidString, directoryHint: .isDirectory)
+            .appending(path: "Prefix", directoryHint: .isDirectory)
+        guard fileManager.fileExists(atPath: pointPrefixURL.path),
+              fileManager.fileExists(atPath: environment.prefixURL.path) else {
+            throw StillCoreError.invalidStore("Restore Point files are missing.")
+        }
+
+        let parentURL = environment.prefixURL.deletingLastPathComponent()
+        let transactionID = UUID().uuidString
+        let stagingURL = parentURL.appending(
+            path: ".still-restore-staging-\(transactionID)",
+            directoryHint: .isDirectory
+        )
+        let rollbackURL = parentURL.appending(
+            path: ".still-restore-rollback-\(transactionID)",
+            directoryHint: .isDirectory
+        )
+        _ = try FileTreeServices.verifiedCopy(from: pointPrefixURL, to: stagingURL)
+
+        var restoredEnvironment = environment
+        restoredEnvironment.profileID = manifest.snapshot.profileID
+        restoredEnvironment.pinnedEngineBuildID = manifest.snapshot.engineBuildID
+        restoredEnvironment.provisionedEngineBuildID = manifest.snapshot.engineBuildID
+        restoredEnvironment.graphicsBackend = manifest.snapshot.graphicsBackend
+        restoredEnvironment.windowsVersion = manifest.snapshot.windowsVersion
+        restoredEnvironment.enhancedSync = manifest.snapshot.enhancedSync
+        restoredEnvironment.updatedAt = .now
+
+        var sourceMoved = false
+        var restoredPrefixInstalled = false
+        do {
+            try fileManager.moveItem(at: environment.prefixURL, to: rollbackURL)
+            sourceMoved = true
+            try fileManager.moveItem(at: stagingURL, to: environment.prefixURL)
+            restoredPrefixInstalled = true
+            try await store.commitRestorePoint(
+                environment: restoredEnvironment,
+                applications: manifest.snapshot.applications,
+                launchEntries: manifest.snapshot.launchEntries,
+                expectedEnvironment: environment,
+                expectedStoreIdentifier: document.storeIdentifier
+            )
+            try fileManager.removeItem(at: rollbackURL)
+            return manifest
+        } catch {
+            if restoredPrefixInstalled,
+               fileManager.fileExists(atPath: environment.prefixURL.path) {
+                try? fileManager.removeItem(at: environment.prefixURL)
+            }
+            if sourceMoved, fileManager.fileExists(atPath: rollbackURL.path) {
+                do {
+                    try fileManager.moveItem(at: rollbackURL, to: environment.prefixURL)
+                } catch let rollbackError {
+                    throw StillCoreError.verificationFailed(
+                        "Restore failed and the original Environment could not be returned to its path: \(rollbackError.localizedDescription)"
+                    )
+                }
+            }
+            if fileManager.fileExists(atPath: stagingURL.path) {
+                try? fileManager.removeItem(at: stagingURL)
+            }
+            throw error
+        }
     }
 
     private func requireStopped(_ environmentID: UUID, sessions: [LaunchSession]) throws {

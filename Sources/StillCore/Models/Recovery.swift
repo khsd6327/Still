@@ -45,7 +45,7 @@ public struct RestorePointManifest: Codable, Hashable, Identifiable, Sendable {
 }
 
 public struct BackupManifest: Codable, Hashable, Sendable {
-    public static let currentFormatVersion = 2
+    public static let currentFormatVersion = 3
 
     public let formatVersion: Int
     public let createdAt: Date

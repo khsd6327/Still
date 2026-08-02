@@ -1,4 +1,5 @@
 import CryptoKit
+import Darwin
 import Foundation
 
 struct FileTreeEntry: Hashable {
@@ -43,15 +44,27 @@ enum FileTreeServices {
     }
 
     static func verifiedCopy(from source: URL, to destination: URL) throws -> Bool {
-        let sourceEntries = try entries(at: source)
-        let usedClone = try cloneCopy(from: source, to: destination)
-        let destinationEntries = try entries(at: destination)
-        guard sourceEntries == destinationEntries else {
-            throw StillCoreError.verificationFailed(
-                "The copied Environment does not match its source."
+        guard !FileManager.default.fileExists(atPath: destination.path) else {
+            throw StillCoreError.invalidStore(
+                "The copy destination already exists: \(destination.path)"
             )
         }
-        return usedClone
+        do {
+            let sourceEntries = try entries(at: source)
+            let usedClone = try cloneCopy(from: source, to: destination)
+            let destinationEntries = try entries(at: destination)
+            guard sourceEntries == destinationEntries else {
+                throw StillCoreError.verificationFailed(
+                    "The copied Environment does not match its source."
+                )
+            }
+            return usedClone
+        } catch {
+            if FileManager.default.fileExists(atPath: destination.path) {
+                try? FileManager.default.removeItem(at: destination)
+            }
+            throw error
+        }
     }
 
     private static func cloneCopy(from source: URL, to destination: URL) throws -> Bool {
@@ -69,8 +82,15 @@ enum FileTreeServices {
         if FileManager.default.fileExists(atPath: destination.path) {
             try FileManager.default.removeItem(at: destination)
         }
-        try FileManager.default.copyItem(at: source, to: destination)
-        return false
+        do {
+            try FileManager.default.copyItem(at: source, to: destination)
+            return false
+        } catch {
+            if FileManager.default.fileExists(atPath: destination.path) {
+                try? FileManager.default.removeItem(at: destination)
+            }
+            throw error
+        }
     }
 
     static func directorySize(_ url: URL) throws -> Int64 {
@@ -85,5 +105,30 @@ enum FileTreeServices {
             throw StillCoreError.unsafeArchivePath(filePath)
         }
         return String(filePath.dropFirst(prefix.count))
+    }
+
+    static func lexicalRelativePath(of url: URL, under rootURL: URL) throws -> String {
+        let filePath = url.standardizedFileURL.path
+        let rootPaths = Set([
+            rootURL.standardizedFileURL.path,
+            canonicalExistingPath(rootURL)
+        ])
+        for rootPath in rootPaths {
+            let prefix = rootPath.hasSuffix("/") ? rootPath : rootPath + "/"
+            if filePath.hasPrefix(prefix) {
+                return String(filePath.dropFirst(prefix.count))
+            }
+        }
+        throw StillCoreError.unsafeArchivePath(filePath)
+    }
+
+    private static func canonicalExistingPath(_ url: URL) -> String {
+        var buffer = [CChar](repeating: 0, count: Int(PATH_MAX))
+        let resolved = url.withUnsafeFileSystemRepresentation { pointer -> String? in
+            guard let pointer, realpath(pointer, &buffer) != nil else { return nil }
+            let end = buffer.firstIndex(of: 0) ?? buffer.endIndex
+            return String(decoding: buffer[..<end].map(UInt8.init(bitPattern:)), as: UTF8.self)
+        }
+        return resolved ?? url.standardizedFileURL.path
     }
 }

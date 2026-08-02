@@ -3,11 +3,17 @@ import Foundation
 import Security
 
 private struct BackupFileEntry {
+    enum Kind {
+        case regularFile
+        case symbolicLink(target: String)
+    }
+
     let sourceURL: URL
     let relativePath: String
     let permissions: Int
     let byteCount: Int64
     let sha256: String
+    let kind: Kind
 }
 
 private struct BackupFileMetadata: Codable {
@@ -15,6 +21,11 @@ private struct BackupFileMetadata: Codable {
     let permissions: Int
     let byteCount: Int64
     let sha256: String
+}
+
+private struct BackupSymbolicLinkMetadata: Codable {
+    let relativePath: String
+    let target: String
 }
 
 private struct LegacyBackupFileRecord: Codable {
@@ -64,7 +75,8 @@ private struct BackupKeyDerivation: Codable {
 
 private struct BackupContainerHeader: Codable {
     static let contract = "app.stillproject.backup"
-    static let currentVersion = 2
+    static let currentVersion = 3
+    static let supportedVersions = 2 ... currentVersion
 
     let contractID: String
     let containerVersion: Int
@@ -79,6 +91,7 @@ private enum BackupFrameKind: UInt8 {
     case fileMetadata = 2
     case fileChunk = 3
     case fileEnd = 4
+    case symbolicLinkMetadata = 5
     case archiveEnd = 255
 }
 
@@ -247,6 +260,7 @@ private final class BackupContainerReader {
     private var key: SymmetricKey?
     private var noncePrefix: Data?
     private var frameIndex: UInt32 = 0
+    private(set) var containerVersion = BackupContainerHeader.currentVersion
 
     init(url: URL, password: String?, decoder: JSONDecoder) throws {
         handle = try FileHandle(forReadingFrom: url)
@@ -263,9 +277,10 @@ private final class BackupContainerReader {
             headerDigest = Data(SHA256.hash(data: headerData))
             let header = try decoder.decode(BackupContainerHeader.self, from: headerData)
             guard header.contractID == BackupContainerHeader.contract,
-                  header.containerVersion == BackupContainerHeader.currentVersion else {
+                  BackupContainerHeader.supportedVersions.contains(header.containerVersion) else {
                 throw StillCoreError.unsupportedSchema(header.containerVersion)
             }
+            containerVersion = header.containerVersion
             if header.isEncrypted {
                 guard let password, !password.isEmpty else {
                     throw StillCoreError.backupPasswordRequired
@@ -309,7 +324,8 @@ private final class BackupContainerReader {
             throw StillCoreError.invalidStore("The backup manifest is missing.")
         }
         let manifest = try decoder.decode(BackupManifest.self, from: frame.payload)
-        guard manifest.formatVersion == BackupManifest.currentFormatVersion else {
+        guard manifest.formatVersion == containerVersion,
+              (2 ... BackupManifest.currentFormatVersion).contains(manifest.formatVersion) else {
             throw StillCoreError.unsupportedSchema(manifest.formatVersion)
         }
         return manifest
@@ -372,7 +388,7 @@ private final class BackupContainerReader {
         switch kind {
         case .manifest:
             return Self.maximumManifestSize + authenticationBytes
-        case .fileMetadata:
+        case .fileMetadata, .symbolicLinkMetadata:
             return Self.maximumMetadataSize + authenticationBytes
         case .fileChunk:
             return BackupContainerWriter.chunkByteCount + authenticationBytes
@@ -386,7 +402,7 @@ private final class BackupContainerReader {
         switch kind {
         case .manifest:
             valid = (1 ... Self.maximumManifestSize).contains(count)
-        case .fileMetadata:
+        case .fileMetadata, .symbolicLinkMetadata:
             valid = (1 ... Self.maximumMetadataSize).contains(count)
         case .fileChunk:
             valid = (1 ... BackupContainerWriter.chunkByteCount).contains(count)
@@ -520,18 +536,29 @@ public actor BackupService {
                 payload: encoder.encode(preview.manifest)
             )
             for entry in entries {
-                let metadata = BackupFileMetadata(
-                    relativePath: entry.relativePath,
-                    permissions: entry.permissions,
-                    byteCount: entry.byteCount,
-                    sha256: entry.sha256
-                )
-                try writer.write(
-                    kind: .fileMetadata,
-                    payload: encoder.encode(metadata)
-                )
-                try writeFile(entry, to: writer)
-                try writer.write(kind: .fileEnd, payload: Data())
+                switch entry.kind {
+                case .regularFile:
+                    let metadata = BackupFileMetadata(
+                        relativePath: entry.relativePath,
+                        permissions: entry.permissions,
+                        byteCount: entry.byteCount,
+                        sha256: entry.sha256
+                    )
+                    try writer.write(
+                        kind: .fileMetadata,
+                        payload: encoder.encode(metadata)
+                    )
+                    try writeFile(entry, to: writer)
+                    try writer.write(kind: .fileEnd, payload: Data())
+                case .symbolicLink(let target):
+                    try writer.write(
+                        kind: .symbolicLinkMetadata,
+                        payload: encoder.encode(BackupSymbolicLinkMetadata(
+                            relativePath: entry.relativePath,
+                            target: target
+                        ))
+                    )
+                }
             }
             try writer.write(kind: .archiveEnd, payload: Data())
             try writer.finish()
@@ -630,6 +657,7 @@ public actor BackupService {
             var totalByteCount: Int64 = 0
             var fileCount = 0
             var paths = Set<String>()
+            var symbolicLinks: [BackupSymbolicLinkMetadata] = []
 
             while true {
                 let frame = try reader.readFrame()
@@ -668,6 +696,24 @@ public actor BackupService {
                     metadata = value
                     hasher = SHA256()
                     restoredByteCount = 0
+                case .symbolicLinkMetadata:
+                    guard reader.containerVersion >= 3, metadata == nil else {
+                        throw StillCoreError.invalidStore(
+                            "The backup contains an unexpected symbolic link record."
+                        )
+                    }
+                    let value = try decoder.decode(
+                        BackupSymbolicLinkMetadata.self,
+                        from: frame.payload
+                    )
+                    try validate(symbolicLink: value)
+                    guard paths.insert(value.relativePath).inserted else {
+                        throw StillCoreError.invalidStore(
+                            "The backup contains duplicate file paths."
+                        )
+                    }
+                    symbolicLinks.append(value)
+                    fileCount += 1
                 case .fileChunk:
                     guard let current = metadata, var currentHasher = hasher,
                           let outputHandle else {
@@ -724,6 +770,7 @@ public actor BackupService {
                             "The restored file set does not match the manifest."
                         )
                     }
+                    try restoreSymbolicLinks(symbolicLinks, under: stagingURL)
                     try fileManager.moveItem(at: stagingURL, to: destinationPrefixURL)
                     return manifest
                 }
@@ -778,14 +825,35 @@ public actor BackupService {
         ) else { return [] }
         var entries: [BackupFileEntry] = []
         for case let url as URL in enumerator {
-            let relative = try FileTreeServices.relativePath(of: url, under: rootURL)
+            let symbolicLinkTarget = try? fileManager.destinationOfSymbolicLink(
+                atPath: url.path
+            )
+            let values = try url.resourceValues(
+                forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey]
+            )
+            let relative = try symbolicLinkTarget != nil
+                ? FileTreeServices.lexicalRelativePath(of: url, under: rootURL)
+                : FileTreeServices.relativePath(of: url, under: rootURL)
             if shouldExclude(relative) {
                 enumerator.skipDescendants()
                 continue
             }
-            let values = try url.resourceValues(
-                forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey]
-            )
+            if let target = symbolicLinkTarget {
+                try validate(symbolicLink: BackupSymbolicLinkMetadata(
+                    relativePath: relative,
+                    target: target
+                ))
+                entries.append(BackupFileEntry(
+                    sourceURL: url,
+                    relativePath: relative,
+                    permissions: 0,
+                    byteCount: 0,
+                    sha256: "",
+                    kind: .symbolicLink(target: target)
+                ))
+                enumerator.skipDescendants()
+                continue
+            }
             guard values.isRegularFile == true,
                   values.isSymbolicLink != true else { continue }
             let attributes = try fileManager.attributesOfItem(atPath: url.path)
@@ -796,7 +864,8 @@ public actor BackupService {
                 relativePath: relative,
                 permissions: attributes[.posixPermissions] as? Int ?? 0o644,
                 byteCount: byteCount,
-                sha256: try SHA256Verifier.digest(of: url)
+                sha256: try SHA256Verifier.digest(of: url),
+                kind: .regularFile
             ))
         }
         return entries.sorted { $0.relativePath < $1.relativePath }
@@ -812,6 +881,43 @@ public actor BackupService {
                 || path.contains("/desktop/")
         ) { return true }
         return path.contains("/cache/") || path.hasSuffix("/cache")
+    }
+
+    private func validate(symbolicLink: BackupSymbolicLinkMetadata) throws {
+        try validate(relativePath: symbolicLink.relativePath)
+        guard !symbolicLink.target.isEmpty,
+              symbolicLink.target.utf8.count <= 16_384,
+              !symbolicLink.target.contains("\0") else {
+            throw StillCoreError.invalidStore(
+                "The backup contains an invalid symbolic link target."
+            )
+        }
+    }
+
+    private func restoreSymbolicLinks(
+        _ symbolicLinks: [BackupSymbolicLinkMetadata],
+        under rootURL: URL
+    ) throws {
+        let linkPaths = Set(symbolicLinks.map(\.relativePath))
+        for path in linkPaths {
+            let prefix = path + "/"
+            guard !linkPaths.contains(where: { $0.hasPrefix(prefix) }) else {
+                throw StillCoreError.invalidStore(
+                    "The backup contains nested symbolic link paths."
+                )
+            }
+        }
+        for symbolicLink in symbolicLinks.sorted(by: { $0.relativePath < $1.relativePath }) {
+            let outputURL = rootURL.appending(path: symbolicLink.relativePath)
+            try fileManager.createDirectory(
+                at: outputURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try fileManager.createSymbolicLink(
+                atPath: outputURL.path,
+                withDestinationPath: symbolicLink.target
+            )
+        }
     }
 
     private func decodeLegacyPayload(

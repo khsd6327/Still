@@ -431,6 +431,83 @@ public actor JSONStillStore {
         try save(document)
     }
 
+    public func commitRestorePoint(
+        environment restoredEnvironment: WindowsEnvironment,
+        applications restoredApplications: [LibraryApplication],
+        launchEntries restoredLaunchEntries: [LaunchEntry],
+        expectedEnvironment: WindowsEnvironment,
+        expectedStoreIdentifier: UUID
+    ) throws {
+        var document = try load()
+        guard document.storeIdentifier == expectedStoreIdentifier else {
+            throw StillCoreError.invalidStore(
+                "The Restore Point transaction belongs to a different Still store."
+            )
+        }
+        guard let environmentIndex = document.environments.firstIndex(
+            where: { $0.id == expectedEnvironment.id }
+        ), document.environments[environmentIndex] == expectedEnvironment else {
+            throw StillCoreError.invalidStore(
+                "The Environment changed while its Restore Point was being restored."
+            )
+        }
+        guard restoredEnvironment.id == expectedEnvironment.id,
+              restoredEnvironment.prefixURL.standardizedFileURL
+                == expectedEnvironment.prefixURL.standardizedFileURL,
+              restoredEnvironment.ownership == expectedEnvironment.ownership,
+              restoredEnvironment.managementNonce == expectedEnvironment.managementNonce else {
+            throw StillCoreError.invalidStore(
+                "A Restore Point cannot change Environment identity or ownership."
+            )
+        }
+        if let engineBuildID = restoredEnvironment.pinnedEngineBuildID,
+           !document.engineBuilds.contains(where: { $0.id == engineBuildID }) {
+            throw StillCoreError.engineNotFound(engineBuildID)
+        }
+        guard restoredApplications.allSatisfy({
+            $0.environmentID == restoredEnvironment.id
+        }) else {
+            throw StillCoreError.invalidStore(
+                "The restored applications do not belong to the Environment."
+            )
+        }
+        let restoredApplicationIDs = Set(restoredApplications.map(\.id))
+        guard restoredApplicationIDs.count == restoredApplications.count,
+              restoredLaunchEntries.allSatisfy({
+                  restoredApplicationIDs.contains($0.applicationID)
+              }),
+              Set(restoredLaunchEntries.map(\.id)).count == restoredLaunchEntries.count else {
+            throw StillCoreError.invalidStore(
+                "The restored application relationships are inconsistent."
+            )
+        }
+        let currentApplicationIDs = Set(document.applications.lazy
+            .filter { $0.environmentID == restoredEnvironment.id }
+            .map(\.id))
+        let otherApplicationIDs = Set(document.applications.lazy
+            .filter { $0.environmentID != restoredEnvironment.id }
+            .map(\.id))
+        let currentEntryIDs = Set(document.launchEntries.lazy
+            .filter { currentApplicationIDs.contains($0.applicationID) }
+            .map(\.id))
+        let otherEntryIDs = Set(document.launchEntries.lazy
+            .filter { !currentEntryIDs.contains($0.id) }
+            .map(\.id))
+        guard restoredApplicationIDs.isDisjoint(with: otherApplicationIDs),
+              Set(restoredLaunchEntries.map(\.id)).isDisjoint(with: otherEntryIDs) else {
+            throw StillCoreError.invalidStore(
+                "The restored records conflict with another Environment."
+            )
+        }
+
+        document.environments[environmentIndex] = restoredEnvironment
+        document.applications.removeAll { $0.environmentID == restoredEnvironment.id }
+        document.launchEntries.removeAll { currentApplicationIDs.contains($0.applicationID) }
+        document.applications.append(contentsOf: restoredApplications)
+        document.launchEntries.append(contentsOf: restoredLaunchEntries)
+        try save(document)
+    }
+
     public func commitRestoredEnvironment(
         _ environment: WindowsEnvironment,
         applications: [LibraryApplication],
