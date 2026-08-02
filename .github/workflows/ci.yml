@@ -1,0 +1,27 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - name: Swift tests
+        run: swift test
+      - name: Xcode build
+        run: >-
+          xcodebuild -project Still.xcodeproj -scheme Still
+          -configuration Debug -derivedDataPath .derived-data
+          CODE_SIGNING_ALLOWED=NO build
+      - name: Verify product
+        run: |
+          test -x .derived-data/Build/Products/Debug/Still.app/Contents/MacOS/Still
+          /usr/bin/codesign --force --deep --sign - .derived-data/Build/Products/Debug/Still.app
+          /usr/bin/codesign --verify --deep --strict .derived-data/Build/Products/Debug/Still.app

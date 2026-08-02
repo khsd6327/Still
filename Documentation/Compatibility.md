@@ -42,6 +42,25 @@ packages. Users can inspect and override these settings.
 - Compatibility results are specific to the tested application and version.
 - Reaching a menu or rendering a frame does not establish stable playability.
 
+## Visual smoke checks
+
+Steam UI captures can be checked for a nonblank rendered frame with:
+
+```sh
+Scripts/verify-visual-smoke.swift ui steam.png
+```
+
+Game rendering checks use two captures from the same window after an input or
+camera change. Both frames must contain visual structure and differ by the
+minimum motion threshold:
+
+```sh
+Scripts/verify-visual-smoke.swift motion before.png after.png
+```
+
+These checks detect blank-frame regressions and visible frame progression. They
+do not change the compatibility boundary recorded for an application.
+
 ## Steam libraries
 
 Still reads installed game metadata from Steam library manifests. Steam helper
