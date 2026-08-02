@@ -41,6 +41,54 @@ final class DXMTBridgeValidatorTests: XCTestCase {
         XCTAssertTrue(invalid.reason?.contains("integrity") == true)
     }
 
+    func testAcceptsPackageBuildSuffixForMatchingWineVersion() throws {
+        let rootURL = FileManager.default.temporaryDirectory
+            .appending(path: "StillDXMTBridgeSuffixTests")
+            .appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: rootURL) }
+
+        let runtimeURL = rootURL.appending(path: "wine", directoryHint: .isDirectory)
+        let binaryURL = runtimeURL.appending(path: "bin/wine")
+        let artifactURL = runtimeURL.appending(path: "lib/wine/test.dll")
+        let manifestURL = runtimeURL.appending(path: "share/still/dxmt-bridge.json")
+        try FileManager.default.createDirectory(
+            at: binaryURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try FileManager.default.createDirectory(
+            at: artifactURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try FileManager.default.createDirectory(
+            at: manifestURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try Data("wine".utf8).write(to: binaryURL)
+        try Data("artifact".utf8).write(to: artifactURL)
+        let digest = try SHA256Verifier.digest(of: artifactURL)
+        let manifest = DXMTBridgeManifest(
+            wineVersion: "11.14",
+            dxmtRevision: "revision",
+            artifacts: [DXMTBridgeArtifact(
+                relativePath: "lib/wine/test.dll",
+                sha256: digest
+            )]
+        )
+        let encoder = JSONEncoder()
+        try encoder.encode(manifest).write(to: manifestURL)
+
+        let engine = EngineDescriptor(
+            id: "local-patched",
+            displayName: "Local Patched",
+            version: "11.14-stable1",
+            family: .wineStaging,
+            wineBinaryURL: binaryURL,
+            capabilities: [.win64, .dxmt]
+        )
+
+        XCTAssertTrue(DXMTBridgeValidator().validate(engine: engine).isAvailable)
+    }
+
     func testCapabilityRegistryReportsBridgeReason() {
         let host = HostCapabilitySnapshot(
             architecture: .arm64, supportsMetal: true, supportsRosetta: true

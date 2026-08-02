@@ -207,6 +207,40 @@ final class CompatibilityFoundationTests: XCTestCase {
         ))
     }
 
+    func testKnownSteamGamesMatchTheirOwnProfiles() {
+        let matcher = CompatibilityProfileMatcher()
+        let environmentID = UUID()
+        let cashCleaner = LibraryApplication(
+            environmentID: environmentID,
+            name: "Cash Cleaner Simulator",
+            providerID: "steam",
+            providerItemID: "2488370"
+        )
+        let supermarketChaos = LibraryApplication(
+            environmentID: environmentID,
+            name: "Supermarket Chaos",
+            providerID: "steam",
+            providerItemID: "4800590"
+        )
+
+        XCTAssertEqual(
+            matcher.profile(
+                for: cashCleaner,
+                executableURL: URL(filePath: "/tmp/steam.exe"),
+                profiles: BundledCompatibilityProfiles.all
+            )?.id,
+            BundledCompatibilityProfiles.cashCleanerSimulator.id
+        )
+        XCTAssertEqual(
+            matcher.profile(
+                for: supermarketChaos,
+                executableURL: URL(filePath: "/tmp/steam.exe"),
+                profiles: BundledCompatibilityProfiles.all
+            )?.id,
+            BundledCompatibilityProfiles.supermarketChaos.id
+        )
+    }
+
     func testDiscoveryPreservesAnExistingProfileSelection() {
         let matcher = CompatibilityProfileMatcher()
         let application = LibraryApplication(

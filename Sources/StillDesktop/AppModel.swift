@@ -485,7 +485,7 @@ final class AppModel: ObservableObject {
             let effectiveBottle = bottle(from: effectiveEnvironment)
             var launchEnvironment = effective.environmentVariables.mapValues(\.value)
             var resolvedArguments = entry.arguments
-            if profile?.id == BundledCompatibilityProfiles.steam.id {
+            if SteamBootstrapper.isSteamClientExecutable(entry.executableURL) {
                 launchEnvironment.merge(
                     SteamBootstrapper.launchEnvironment(
                         for: effectiveBottle,
@@ -669,6 +669,35 @@ final class AppModel: ObservableObject {
                 try? operation.transition(to: .failed, resultSummary: error.localizedDescription)
                 try? await store.saveOperation(operation)
             }
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func changePinnedEngine(
+        for environment: WindowsEnvironment,
+        to engine: EngineDescriptor
+    ) async {
+        guard environment.pinnedEngineBuildID != engine.id else { return }
+
+        do {
+            let restorePoint = try await restorePointService.create(
+                environment: environment,
+                applications: applications,
+                launchEntries: launchEntries,
+                activeSessions: sessions
+            )
+            try await store.updatePinnedEngine(
+                environmentID: environment.id,
+                engineBuildID: engine.id,
+                activeSessions: sessions,
+                userApproved: true,
+                restorePointCreated: true
+            )
+            latestRestorePoint = restorePoint
+            await load(scanRegisteredEnvironments: false)
+            selectedEnvironmentID = environment.id
+            activityState = .success("Engine changed to \(engine.displayName).")
+        } catch {
             errorMessage = error.localizedDescription
         }
     }

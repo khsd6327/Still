@@ -47,7 +47,7 @@ final class ApplicationRecipeTests: XCTestCase {
         )
     }
 
-    func testSteamDXMTClientEnablesScopedRawANGLEBridge() {
+    func testSteamDXMTClientEnablesStableRemoteMetalAndScopedRawANGLEBridge() {
         let bottle = Bottle(
             name: "Steam",
             prefixURL: URL(filePath: "/tmp/steam"),
@@ -59,7 +59,11 @@ final class ApplicationRecipeTests: XCTestCase {
                 for: bottle,
                 executableURL: URL(filePath: "/tmp/steam/steam.exe")
             ),
-            ["STILL_STEAM_CEF_RAW_ANGLE": "1"]
+            [
+                "DXMT_CONFIG": "d3d11.preferredMaxFrameRate=72;",
+                "STILL_STEAM_CEF_RAW_ANGLE": "1",
+                "WINEMAC_REMOTE_METAL_MODE": "stable"
+            ]
         )
         XCTAssertEqual(
             SteamBootstrapper.launchEnvironment(
@@ -78,6 +82,30 @@ final class ApplicationRecipeTests: XCTestCase {
                 executableURL: URL(filePath: "/tmp/steam/steam.exe")
             ),
             [:]
+        )
+    }
+
+    func testVerifiedGameProfilesUseDXMTAndReducedRenderResolution() {
+        let cashCleaner = BundledCompatibilityProfiles.cashCleanerSimulator
+        let supermarketChaos = BundledCompatibilityProfiles.supermarketChaos
+
+        XCTAssertEqual(cashCleaner.requiredEngineFamily, .wineStaging)
+        XCTAssertEqual(cashCleaner.recommendedSettings.graphicsBackend, .dxmt)
+        XCTAssertEqual(
+            cashCleaner.recommendedSettings.launchArguments,
+            ["-dx11", "-ResX=1920", "-ResY=1080", "-NoVSync"]
+        )
+        XCTAssertEqual(supermarketChaos.requiredEngineFamily, .wineStaging)
+        XCTAssertEqual(supermarketChaos.recommendedSettings.graphicsBackend, .dxmt)
+        XCTAssertEqual(
+            supermarketChaos.recommendedSettings.launchArguments,
+            [
+                "-force-d3d11",
+                "-force-d3d11-no-singlethreaded",
+                "-screen-width", "1920",
+                "-screen-height", "1080",
+                "-screen-fullscreen", "1"
+            ]
         )
     }
 }

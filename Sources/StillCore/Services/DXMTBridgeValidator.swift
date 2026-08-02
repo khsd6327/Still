@@ -22,7 +22,8 @@ public struct DXMTBridgeValidator: Sendable {
                     "The DXMT bridge ABI is \(manifest.abiVersion); Still requires \(DXMTBridgeManifest.supportedABIVersion)."
                 )
             }
-            guard manifest.wineVersion == engine.version else {
+            guard engine.version == manifest.wineVersion
+                    || engine.version.hasPrefix(manifest.wineVersion + "-") else {
                 return .unavailable("The DXMT bridge was built for a different Wine version.")
             }
             guard !manifest.dxmtRevision.isEmpty, !manifest.artifacts.isEmpty else {
