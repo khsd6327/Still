@@ -51,18 +51,29 @@ esac
   wine_binary = root.join(wine_relative_path)
   runtime_root = wine_binary.dirname.dirname
   bridge_manifest = runtime_root.join("share/still/dxmt-bridge.json")
-  relative_paths = [wine_relative_path]
+  wine_version = nil
+  dxmt_revision = nil
 
   if bridge_manifest.file?
-    relative_paths << bridge_manifest.relative_path_from(root).to_s
     bridge = JSON.parse(bridge_manifest.read)
-    Array(bridge["artifacts"]).each do |artifact|
-      bridge_path = artifact.fetch("relativePath")
-      relative_paths << runtime_root.join(bridge_path).relative_path_from(root).to_s
-    end
+    wine_version = bridge.fetch("wineVersion")
+    dxmt_revision = bridge.fetch("dxmtRevision")
+  elsif (Integer(capabilities, 10) & 32) != 0
+    abort("error: a DXMT engine requires a direct bridge manifest")
   end
 
-  artifacts = relative_paths.uniq.sort.map do |relative_path|
+  relative_paths = Dir.glob(root.join("**", "*").to_s, File::FNM_DOTMATCH)
+    .map { |path| Pathname(path) }
+    .select do |candidate|
+      candidate != root && candidate.basename.to_s != "." &&
+        candidate.basename.to_s != ".." && candidate.lstat.file? &&
+        !candidate.lstat.symlink? && candidate != Pathname(target)
+    end
+    .map { |candidate| candidate.relative_path_from(root).to_s }
+    .uniq
+    .sort
+
+  artifacts = relative_paths.map do |relative_path|
     candidate = root.join(relative_path)
     resolved = candidate.realpath
     unless resolved.to_s.start_with?(root.to_s + File::SEPARATOR) &&
@@ -79,13 +90,15 @@ esac
 
   document = {
     "contractID" => "app.stillproject.engine-build",
-    "schemaVersion" => 1,
+    "schemaVersion" => 2,
     "id" => id,
     "family" => family,
     "displayName" => display_name,
     "version" => version,
     "archiveRoot" => archive_root,
     "wineBinaryRelativePath" => wine_path,
+    "wineVersion" => wine_version,
+    "dxmtRevision" => dxmt_revision,
     "capabilities" => Integer(capabilities, 10),
     "artifacts" => artifacts
   }

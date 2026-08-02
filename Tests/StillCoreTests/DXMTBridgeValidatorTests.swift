@@ -41,7 +41,7 @@ final class DXMTBridgeValidatorTests: XCTestCase {
         XCTAssertTrue(invalid.reason?.contains("integrity") == true)
     }
 
-    func testAcceptsPackageBuildSuffixForMatchingWineVersion() throws {
+    func testAcceptsExplicitPackageAndWineVersions() throws {
         let rootURL = FileManager.default.temporaryDirectory
             .appending(path: "StillDXMTBridgeSuffixTests")
             .appending(path: UUID().uuidString)
@@ -81,12 +81,50 @@ final class DXMTBridgeValidatorTests: XCTestCase {
             id: "local-patched",
             displayName: "Local Patched",
             version: "11.14-stable1",
+            wineVersion: "11.14",
+            dxmtRevision: "revision",
             family: .wineStaging,
             wineBinaryURL: binaryURL,
             capabilities: [.win64, .dxmt]
         )
 
         XCTAssertTrue(DXMTBridgeValidator().validate(engine: engine).isAvailable)
+    }
+
+    func testRejectsPackageSuffixWithoutExplicitWineIdentity() throws {
+        let rootURL = FileManager.default.temporaryDirectory
+            .appending(path: "StillDXMTBridgeUnpinnedTests")
+            .appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: rootURL) }
+        let binaryURL = rootURL.appending(path: "bin/wine")
+        let artifactURL = rootURL.appending(path: "lib/wine/test.dll")
+        let manifestURL = rootURL.appending(path: "share/still/dxmt-bridge.json")
+        try FileManager.default.createDirectory(
+            at: artifactURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try FileManager.default.createDirectory(
+            at: manifestURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try Data("artifact".utf8).write(to: artifactURL)
+        try JSONEncoder().encode(DXMTBridgeManifest(
+            wineVersion: "11.14",
+            dxmtRevision: "revision",
+            artifacts: [DXMTBridgeArtifact(
+                relativePath: "lib/wine/test.dll",
+                sha256: try SHA256Verifier.digest(of: artifactURL)
+            )]
+        )).write(to: manifestURL)
+        let engine = EngineDescriptor(
+            id: "unversioned",
+            displayName: "Unversioned",
+            version: "11.14-arbitrary",
+            wineBinaryURL: binaryURL,
+            capabilities: [.win64, .dxmt]
+        )
+
+        XCTAssertFalse(DXMTBridgeValidator().validate(engine: engine).isAvailable)
     }
 
     func testCapabilityRegistryReportsBridgeReason() {

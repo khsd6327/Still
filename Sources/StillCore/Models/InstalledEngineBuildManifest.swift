@@ -21,7 +21,7 @@ public struct InstalledEngineArtifact: Codable, Hashable, Sendable {
 
 public struct InstalledEngineBuildManifest: Codable, Hashable, Sendable {
     public static let contract = "app.stillproject.engine-build"
-    public static let supportedSchemaVersion = 1
+    public static let supportedSchemaVersion = 2
     public static let fileName = "still-engine.json"
 
     public let contractID: String
@@ -32,6 +32,8 @@ public struct InstalledEngineBuildManifest: Codable, Hashable, Sendable {
     public let version: String
     public let archiveRoot: String
     public let wineBinaryRelativePath: String
+    public let wineVersion: String?
+    public let dxmtRevision: String?
     public let capabilities: EngineCapabilities
     public let artifacts: [InstalledEngineArtifact]
 
@@ -44,6 +46,8 @@ public struct InstalledEngineBuildManifest: Codable, Hashable, Sendable {
         version: String,
         archiveRoot: String,
         wineBinaryRelativePath: String,
+        wineVersion: String? = nil,
+        dxmtRevision: String? = nil,
         capabilities: EngineCapabilities,
         artifacts: [InstalledEngineArtifact] = []
     ) {
@@ -55,13 +59,16 @@ public struct InstalledEngineBuildManifest: Codable, Hashable, Sendable {
         self.version = version
         self.archiveRoot = archiveRoot
         self.wineBinaryRelativePath = wineBinaryRelativePath
+        self.wineVersion = wineVersion
+        self.dxmtRevision = dxmtRevision
         self.capabilities = capabilities
         self.artifacts = artifacts
     }
 
     private enum CodingKeys: String, CodingKey {
         case contractID, schemaVersion, id, family, displayName, version
-        case archiveRoot, wineBinaryRelativePath, capabilities, artifacts
+        case archiveRoot, wineBinaryRelativePath, wineVersion, dxmtRevision
+        case capabilities, artifacts
     }
 
     public init(from decoder: Decoder) throws {
@@ -77,6 +84,8 @@ public struct InstalledEngineBuildManifest: Codable, Hashable, Sendable {
             String.self,
             forKey: .wineBinaryRelativePath
         )
+        wineVersion = try values.decodeIfPresent(String.self, forKey: .wineVersion)
+        dxmtRevision = try values.decodeIfPresent(String.self, forKey: .dxmtRevision)
         capabilities = try values.decode(EngineCapabilities.self, forKey: .capabilities)
         artifacts = try values.decodeIfPresent(
             [InstalledEngineArtifact].self,

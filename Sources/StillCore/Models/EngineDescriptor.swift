@@ -19,6 +19,8 @@ public struct EngineDescriptor: Codable, Hashable, Identifiable, Sendable {
     public let id: String
     public let displayName: String
     public let version: String
+    public let wineVersion: String?
+    public let dxmtRevision: String?
     public let family: EngineFamily?
     public let wineBinaryURL: URL
     public let capabilities: EngineCapabilities
@@ -29,6 +31,8 @@ public struct EngineDescriptor: Codable, Hashable, Identifiable, Sendable {
         id: String,
         displayName: String,
         version: String,
+        wineVersion: String? = nil,
+        dxmtRevision: String? = nil,
         family: EngineFamily? = nil,
         wineBinaryURL: URL,
         capabilities: EngineCapabilities,
@@ -38,6 +42,8 @@ public struct EngineDescriptor: Codable, Hashable, Identifiable, Sendable {
         self.id = id
         self.displayName = displayName
         self.version = version
+        self.wineVersion = wineVersion
+        self.dxmtRevision = dxmtRevision
         self.family = family
         self.wineBinaryURL = wineBinaryURL
         self.capabilities = capabilities

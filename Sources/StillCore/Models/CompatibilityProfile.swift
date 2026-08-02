@@ -4,6 +4,7 @@ public enum CompatibilityValueSource: Codable, Hashable, Sendable {
     case safeFallback
     case environment
     case profile(String)
+    case runtimePolicy(String)
     case applicationOverride
     case launchOverride
 }
@@ -71,6 +72,7 @@ public struct CompatibilityProfile: Codable, Hashable, Identifiable, Sendable {
     public let displayName: String
     public let matchRules: [ProfileMatchRule]
     public let requiredEngineFamily: EngineFamily?
+    public let requiredDXMTRevision: String?
     public let requiredCapabilities: Set<RuntimeCapability>
     public let dependencies: [ComponentDependency]
     public let recommendedSettings: CompatibilitySettings
@@ -81,6 +83,7 @@ public struct CompatibilityProfile: Codable, Hashable, Identifiable, Sendable {
         displayName: String,
         matchRules: [ProfileMatchRule],
         requiredEngineFamily: EngineFamily? = nil,
+        requiredDXMTRevision: String? = nil,
         requiredCapabilities: Set<RuntimeCapability> = [],
         dependencies: [ComponentDependency] = [],
         recommendedSettings: CompatibilitySettings = CompatibilitySettings(),
@@ -90,6 +93,7 @@ public struct CompatibilityProfile: Codable, Hashable, Identifiable, Sendable {
         self.displayName = displayName
         self.matchRules = matchRules
         self.requiredEngineFamily = requiredEngineFamily
+        self.requiredDXMTRevision = requiredDXMTRevision
         self.requiredCapabilities = requiredCapabilities
         self.dependencies = dependencies
         self.recommendedSettings = recommendedSettings

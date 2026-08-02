@@ -5,6 +5,8 @@ public struct EngineBuild: Codable, Hashable, Identifiable, Sendable {
     public var family: EngineFamily
     public var displayName: String
     public var version: String
+    public var wineVersion: String?
+    public var dxmtRevision: String?
     public var installURL: URL
     public var capabilities: EngineCapabilities
     public var manifestID: String?
@@ -17,6 +19,8 @@ public struct EngineBuild: Codable, Hashable, Identifiable, Sendable {
         family: EngineFamily,
         displayName: String,
         version: String,
+        wineVersion: String? = nil,
+        dxmtRevision: String? = nil,
         installURL: URL,
         capabilities: EngineCapabilities,
         manifestID: String? = nil,
@@ -28,6 +32,8 @@ public struct EngineBuild: Codable, Hashable, Identifiable, Sendable {
         self.family = family
         self.displayName = displayName
         self.version = version
+        self.wineVersion = wineVersion
+        self.dxmtRevision = dxmtRevision
         self.installURL = installURL
         self.capabilities = capabilities
         self.manifestID = manifestID
@@ -37,7 +43,8 @@ public struct EngineBuild: Codable, Hashable, Identifiable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, family, displayName, version, installURL, capabilities
+        case id, family, displayName, version, wineVersion, dxmtRevision
+        case installURL, capabilities
         case manifestID, requiredLicenseID, sourceArchiveSHA256
         case artifactManifestSHA256
     }
@@ -48,6 +55,8 @@ public struct EngineBuild: Codable, Hashable, Identifiable, Sendable {
         family = try values.decode(EngineFamily.self, forKey: .family)
         displayName = try values.decode(String.self, forKey: .displayName)
         version = try values.decode(String.self, forKey: .version)
+        wineVersion = try values.decodeIfPresent(String.self, forKey: .wineVersion)
+        dxmtRevision = try values.decodeIfPresent(String.self, forKey: .dxmtRevision)
         installURL = try values.decode(URL.self, forKey: .installURL)
         capabilities = try values.decode(EngineCapabilities.self, forKey: .capabilities)
         manifestID = try values.decodeIfPresent(String.self, forKey: .manifestID)

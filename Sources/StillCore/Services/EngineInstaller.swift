@@ -168,7 +168,9 @@ public actor EngineInstaller {
         engineDirectory: URL,
         versionDirectory: URL
     ) -> EngineDescriptor? {
-        guard isPlainDirectory(versionDirectory) else { return nil }
+        guard isPlainDirectory(versionDirectory) else {
+            return rejectLocalEngine(versionDirectory, reason: "not a plain directory")
+        }
         let manifestURL = versionDirectory.appending(
             path: InstalledEngineBuildManifest.fileName
         )
@@ -182,34 +184,64 @@ public actor EngineInstaller {
               manifest.id == engineDirectory.lastPathComponent,
               manifest.version == versionDirectory.lastPathComponent,
               isSafePathComponent(manifest.archiveRoot),
-              isSafeRelativePath(manifest.wineBinaryRelativePath) else {
-            return nil
+              isSafeRelativePath(manifest.wineBinaryRelativePath),
+              !manifest.artifacts.isEmpty else {
+            return rejectLocalEngine(versionDirectory, reason: "invalid build manifest")
+        }
+        if manifest.capabilities.contains(.dxmt),
+           (manifest.wineVersion?.isEmpty != false
+               || manifest.dxmtRevision?.isEmpty != false) {
+            return rejectLocalEngine(
+                versionDirectory,
+                reason: "missing explicit Wine or DXMT identity"
+            )
         }
         let binaryURL = versionDirectory
             .appending(path: manifest.archiveRoot, directoryHint: .isDirectory)
             .appending(path: manifest.wineBinaryRelativePath)
-        guard fileManager.isExecutableFile(atPath: binaryURL.path),
-              validateArtifacts(
-                manifest.artifacts,
-                versionDirectory: versionDirectory,
-                wineBinaryRelativePath: "\(manifest.archiveRoot)/\(manifest.wineBinaryRelativePath)"
-              ) else { return nil }
+        guard fileManager.isExecutableFile(atPath: binaryURL.path) else {
+            return rejectLocalEngine(versionDirectory, reason: "Wine binary is unavailable")
+        }
+        guard validateArtifacts(
+            manifest.artifacts,
+            versionDirectory: versionDirectory,
+            wineBinaryRelativePath: "\(manifest.archiveRoot)/\(manifest.wineBinaryRelativePath)"
+        ) else {
+            return rejectLocalEngine(versionDirectory, reason: "artifact verification failed")
+        }
         let descriptor = EngineDescriptor(
             id: manifest.id,
             displayName: manifest.displayName,
             version: manifest.version,
+            wineVersion: manifest.wineVersion,
+            dxmtRevision: manifest.dxmtRevision,
             family: manifest.family,
             wineBinaryURL: binaryURL,
             capabilities: manifest.capabilities,
-            artifactManifestSHA256: manifest.artifacts.isEmpty
-                ? nil
-                : try? SHA256Verifier.digest(of: manifestURL)
+            artifactManifestSHA256: try? SHA256Verifier.digest(of: manifestURL)
         )
-        if descriptor.capabilities.contains(.dxmt),
-           !DXMTBridgeValidator().validate(engine: descriptor).isAvailable {
-            return nil
+        if descriptor.capabilities.contains(.dxmt) {
+            let bridgeAvailability = DXMTBridgeValidator().validate(engine: descriptor)
+            if !bridgeAvailability.isAvailable {
+                return rejectLocalEngine(
+                    versionDirectory,
+                    reason: bridgeAvailability.reason ?? "DXMT bridge verification failed"
+                )
+            }
         }
         return descriptor
+    }
+
+    private func rejectLocalEngine(
+        _ versionDirectory: URL,
+        reason: String
+    ) -> EngineDescriptor? {
+        if ProcessInfo.processInfo.environment["STILL_ENGINE_DIAGNOSTICS"] == "1" {
+            FileHandle.standardError.write(Data(
+                "Rejected local engine at \(versionDirectory.path): \(reason)\n".utf8
+            ))
+        }
+        return nil
     }
 
     private func validateArtifacts(
@@ -217,17 +249,39 @@ public actor EngineInstaller {
         versionDirectory: URL,
         wineBinaryRelativePath: String
     ) -> Bool {
-        guard !artifacts.isEmpty else { return true }
-        guard Set(artifacts.map(\.relativePath)).count == artifacts.count,
-              artifacts.contains(where: {
-                  $0.relativePath == wineBinaryRelativePath && $0.isExecutable
-              }) else { return false }
+        func reject(_ reason: String) -> Bool {
+            if ProcessInfo.processInfo.environment["STILL_ENGINE_DIAGNOSTICS"] == "1" {
+                FileHandle.standardError.write(Data(
+                    "Artifact verification at \(versionDirectory.path): \(reason)\n".utf8
+                ))
+            }
+            return false
+        }
+        guard Set(artifacts.map(\.relativePath)).count == artifacts.count else {
+            return reject("duplicate paths")
+        }
+        guard artifacts.contains(where: {
+            $0.relativePath == wineBinaryRelativePath && $0.isExecutable
+        }) else {
+            return reject("the Wine binary is missing from the artifact manifest")
+        }
+        guard let expectedPaths = regularArtifactPaths(in: versionDirectory) else {
+            return reject("the installed file set could not be enumerated")
+        }
+        let manifestPaths = Set(artifacts.map(\.relativePath))
+        guard manifestPaths == expectedPaths else {
+            let missing = expectedPaths.subtracting(manifestPaths).sorted().first ?? "none"
+            let stale = manifestPaths.subtracting(expectedPaths).sorted().first ?? "none"
+            return reject("file-set mismatch; unlisted=\(missing), missing=\(stale)")
+        }
 
         let rootPath = versionDirectory.standardizedFileURL.path
         for artifact in artifacts {
             guard isSafeRelativePath(artifact.relativePath),
                   artifact.sha256.count == 64,
-                  artifact.byteCount >= 0 else { return false }
+                  artifact.byteCount >= 0 else {
+                return reject("invalid metadata for \(artifact.relativePath)")
+            }
             let url = versionDirectory.appending(path: artifact.relativePath)
             let resolvedPath = url.resolvingSymlinksInPath().standardizedFileURL.path
             guard resolvedPath.hasPrefix(rootPath + "/"),
@@ -237,13 +291,42 @@ public actor EngineInstaller {
                   values.isRegularFile == true,
                   values.isSymbolicLink != true,
                   Int64(values.fileSize ?? -1) == artifact.byteCount,
-                  fileManager.isExecutableFile(atPath: url.path) == artifact.isExecutable,
-                  (try? SHA256Verifier.verify(
-                    fileURL: url,
-                    expectedDigest: artifact.sha256
-                  )) != nil else { return false }
+                  fileManager.isExecutableFile(atPath: url.path) == artifact.isExecutable else {
+                return reject("metadata mismatch for \(artifact.relativePath)")
+            }
+            guard (try? SHA256Verifier.verify(
+                fileURL: url,
+                expectedDigest: artifact.sha256
+            )) != nil else {
+                return reject("hash mismatch for \(artifact.relativePath)")
+            }
         }
         return true
+    }
+
+    private func regularArtifactPaths(in versionDirectory: URL) -> Set<String>? {
+        guard let enumerator = fileManager.enumerator(
+            at: versionDirectory,
+            includingPropertiesForKeys: [.isRegularFileKey, .isSymbolicLinkKey]
+        ) else { return nil }
+        var paths = Set<String>()
+        for case let url as URL in enumerator {
+            guard let values = try? url.resourceValues(
+                forKeys: [.isRegularFileKey, .isSymbolicLinkKey]
+            ) else { return nil }
+            if values.isSymbolicLink == true {
+                continue
+            }
+            guard values.isRegularFile == true else { continue }
+            guard let relative = try? FileTreeServices.lexicalRelativePath(
+                of: url,
+                under: versionDirectory
+            ) else { return nil }
+            if relative != InstalledEngineBuildManifest.fileName {
+                paths.insert(relative)
+            }
+        }
+        return paths
     }
 
     private func isPlainDirectory(_ url: URL) -> Bool {

@@ -168,15 +168,27 @@ final class EngineInstallerTests: XCTestCase {
         XCTAssertTrue(descriptors.isEmpty)
     }
 
-    func testDiscoversLegacyLocalManifestWithoutArtifactIdentity() async throws {
+    func testRejectsLocalManifestWithoutCompleteArtifactIdentity() async throws {
         let fixture = try makeLocalEngineFixture(includesArtifacts: false)
         defer { try? FileManager.default.removeItem(at: fixture.rootURL) }
 
         let descriptors = await EngineInstaller(rootURL: fixture.rootURL)
             .installedDescriptors()
 
-        XCTAssertEqual(descriptors.count, 1)
-        XCTAssertNil(descriptors[0].artifactManifestSHA256)
+        XCTAssertTrue(descriptors.isEmpty)
+    }
+
+    func testRejectsLocallyBuiltEngineWhenUnlistedRuntimeFileAppears() async throws {
+        let fixture = try makeLocalEngineFixture(includesArtifacts: true)
+        defer { try? FileManager.default.removeItem(at: fixture.rootURL) }
+        try Data("unlisted runtime".utf8).write(
+            to: fixture.binaryURL.deletingLastPathComponent().appending(path: "wineserver")
+        )
+
+        let descriptors = await EngineInstaller(rootURL: fixture.rootURL)
+            .installedDescriptors()
+
+        XCTAssertTrue(descriptors.isEmpty)
     }
 
     func testRejectsLocallyBuiltEngineWhenExecutableAttributeChanges() async throws {
@@ -192,6 +204,20 @@ final class EngineInstallerTests: XCTestCase {
             .installedDescriptors()
 
         XCTAssertTrue(descriptors.isEmpty)
+    }
+
+    func testArtifactEnumerationIgnoresSymlinksWithoutSkippingRegularFiles() async throws {
+        let fixture = try makeLocalEngineFixture(includesArtifacts: true)
+        defer { try? FileManager.default.removeItem(at: fixture.rootURL) }
+        try FileManager.default.createSymbolicLink(
+            at: fixture.binaryURL.deletingLastPathComponent().appending(path: "aaa-link"),
+            withDestinationURL: fixture.binaryURL
+        )
+
+        let descriptors = await EngineInstaller(rootURL: fixture.rootURL)
+            .installedDescriptors()
+
+        XCTAssertEqual(descriptors.map(\.id), ["still-local"])
     }
 
     func testGPTKRequiresExternalLicenseAcceptance() async {
