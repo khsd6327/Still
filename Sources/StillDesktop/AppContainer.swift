@@ -28,6 +28,21 @@ struct AppContainer: View {
         .toolbar { toolbar }
         .background(WindowCloseGuard(model: model))
         .task { await model.load() }
+        .safeAreaInset(edge: .top) {
+            if let notice = model.launchNotice {
+                HStack(spacing: 10) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                    Text(notice).font(.callout)
+                    Spacer()
+                    Button("Dismiss") { model.launchNotice = nil }
+                        .buttonStyle(.borderless)
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 9)
+                .background(.bar)
+            }
+        }
         .alert(
             "Still could not complete the operation.",
             isPresented: Binding(
@@ -92,15 +107,21 @@ struct AppContainer: View {
                 .pickerStyle(.segmented)
                 .frame(width: 92)
 
+                if let application = model.selectedApplication {
+                    let runtimeState = model.runtimeState(for: application)
+                    Button(runtimeState.title, systemImage: runtimeState.systemImage) {
+                        Task { await model.performPrimaryApplicationAction() }
+                    }
+                    .disabled(
+                        runtimeState == .launching
+                            || (runtimeState == .idle && !canLaunchSelectedApplication)
+                    )
+                }
+
                 if model.selectedSession != nil {
                     Button("Request Stop", systemImage: "stop.fill") {
                         Task { await model.stopSelectedNormally() }
                     }
-                } else {
-                    Button("Run", systemImage: "play.fill") {
-                        Task { await model.launchSelectedApplication() }
-                    }
-                    .disabled(!canLaunchSelectedApplication)
                 }
 
                 Button("Inspector", systemImage: "sidebar.right") {

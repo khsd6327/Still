@@ -56,19 +56,19 @@ struct LibraryView: View {
                     .buttonStyle(.plain)
                     .simultaneousGesture(TapGesture(count: 2).onEnded {
                         model.selectedApplicationID = application.id
-                        Task { await model.launchSelectedApplication() }
+                        Task { await model.performPrimaryApplicationAction() }
                     })
                     .accessibilityLabel(application.name)
                     .accessibilityValue(accessibilityValue(application))
                     .accessibilityHint("Selects the application. Use Command Return to run it.")
                     .accessibilityAction(named: "Run") {
                         model.selectedApplicationID = application.id
-                        Task { await model.launchSelectedApplication() }
+                        Task { await model.performPrimaryApplicationAction() }
                     }
                     .contextMenu {
-                        Button("Run") {
+                        Button(model.runtimeState(for: application).title) {
                             model.selectedApplicationID = application.id
-                            Task { await model.launchSelectedApplication() }
+                            Task { await model.performPrimaryApplicationAction() }
                         }
                         Button(application.isFavorite ? "Remove from Favorites" : "Add to Favorites") {
                             Task { await model.toggleFavorite(application) }
@@ -104,13 +104,13 @@ struct LibraryView: View {
             }
         }
         .contextMenu(forSelectionType: LibraryApplication.ID.self) { ids in
-            Button("Run") {
+            Button(primaryActionTitle(for: ids)) {
                 model.selectedApplicationID = ids.first
-                Task { await model.launchSelectedApplication() }
+                Task { await model.performPrimaryApplicationAction() }
             }
         } primaryAction: { ids in
             model.selectedApplicationID = ids.first
-            Task { await model.launchSelectedApplication() }
+            Task { await model.performPrimaryApplicationAction() }
         }
     }
 
@@ -139,6 +139,16 @@ struct LibraryView: View {
         let selected = model.selectedApplicationID == application.id ? "Selected" : "Not selected"
         let favorite = application.isFavorite ? ", Favorite" : ""
         return "\(selected), \(application.category.rawValue)\(favorite)"
+    }
+
+    private func primaryActionTitle(
+        for ids: Set<LibraryApplication.ID>
+    ) -> String {
+        guard let id = ids.first,
+              let application = model.applications.first(where: { $0.id == id }) else {
+            return "Run"
+        }
+        return model.runtimeState(for: application).title
     }
 
     private func artworkURL(for application: LibraryApplication) -> URL? {

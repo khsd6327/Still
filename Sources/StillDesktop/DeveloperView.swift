@@ -69,6 +69,49 @@ struct DeveloperView: View {
                         Text("Bridge diagnostics appear when a compatible engine exposes them.")
                             .foregroundStyle(.secondary)
                     }
+                    if let environment = model.selectedEnvironment {
+                        Section("Frame Pacing") {
+                            Toggle(
+                                "Metal Performance HUD",
+                                isOn: Binding(
+                                    get: { environment.metalHUDEnabled },
+                                    set: { enabled in
+                                        Task { await model.setMetalHUDEnabled(enabled) }
+                                    }
+                                )
+                            )
+                            Text("FPS and frame time appear over Metal content on the next launch.")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                    if !model.performanceSnapshots.isEmpty {
+                        Section("Latest Performance Samples") {
+                            ForEach(
+                                model.performanceSnapshots.values.sorted {
+                                    $0.capturedAt > $1.capturedAt
+                                }
+                            ) { snapshot in
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(applicationName(snapshot.applicationID))
+                                        .font(.headline)
+                                    HStack {
+                                        Text(String(format: "CPU %.1f%%", snapshot.cpuPercent))
+                                        Text(ByteCountFormatter.string(
+                                            fromByteCount: Int64(snapshot.residentMemoryBytes),
+                                            countStyle: .memory
+                                        ))
+                                        if let latency = snapshot.launchLatency {
+                                            Text(String(format: "Observed %.1f s", latency))
+                                        }
+                                    }
+                                    .font(.caption.monospaced())
+                                    .foregroundStyle(.secondary)
+                                    Text("\(snapshot.graphicsBackend.displayName) · \(snapshot.processCount) processes")
+                                        .font(.caption).foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                    }
                 }.formStyle(.grouped)
             case .labs:
 #if DEBUG
@@ -119,5 +162,9 @@ struct DeveloperView: View {
         model.sessions.contains { session in
             session.environmentID == environment.id && session.state.isActive
         }
+    }
+
+    private func applicationName(_ id: LibraryApplication.ID) -> String {
+        model.applications.first(where: { $0.id == id })?.name ?? "Windows Application"
     }
 }

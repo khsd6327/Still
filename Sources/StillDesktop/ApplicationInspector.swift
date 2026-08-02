@@ -24,13 +24,16 @@ struct ApplicationInspector: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
-                    Button("Run", systemImage: "play.fill") {
-                        Task { await model.launchSelectedApplication() }
+                    let runtimeState = model.runtimeState(for: application)
+                    Button(runtimeState.title, systemImage: runtimeState.systemImage) {
+                        Task { await model.performPrimaryApplicationAction() }
                     }
                     .buttonStyle(.borderedProminent)
                     .disabled(
-                        application.providerManagedState != nil
-                            && application.providerManagedState != .installed
+                        runtimeState == .launching
+                            || (runtimeState == .idle
+                                && application.providerManagedState != nil
+                                && application.providerManagedState != .installed)
                     )
                     Button(
                         application.isFavorite ? "Remove from Favorites" : "Add to Favorites",
@@ -67,7 +70,18 @@ struct ApplicationInspector: View {
                     }
                 }
                 Section("Recent Failures") {
-                    Text("No recorded failures.").foregroundStyle(.secondary)
+                    let failures = model.recentFailures(for: application)
+                    if failures.isEmpty {
+                        Text("No recorded failures.").foregroundStyle(.secondary)
+                    } else {
+                        ForEach(failures.prefix(3)) { failure in
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(failure.resultSummary ?? "Launch failed")
+                                Text(failure.createdAt, style: .relative)
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
+                        }
+                    }
                 }
             }
             .formStyle(.grouped)

@@ -5,11 +5,11 @@ struct StillCommands: Commands {
 
     var body: some Commands {
         CommandMenu("Application") {
-            Button("Run") {
-                Task { await model.launchSelectedApplication() }
+            Button(primaryActionTitle) {
+                Task { await model.performPrimaryApplicationAction() }
             }
             .keyboardShortcut(.return, modifiers: [.command])
-            .disabled(model.selectedApplication == nil || model.selectedSession != nil)
+            .disabled(primaryActionDisabled)
 
             Button("Reveal in Finder") {
                 model.revealSelectedApplication()
@@ -52,5 +52,18 @@ struct StillCommands: Commands {
             .keyboardShortcut("k", modifiers: [.command, .option, .control, .shift])
             .disabled(model.sessions.isEmpty)
         }
+    }
+
+    private var primaryActionTitle: String {
+        guard let application = model.selectedApplication else { return "Run" }
+        return model.runtimeState(for: application).title
+    }
+
+    private var primaryActionDisabled: Bool {
+        guard let application = model.selectedApplication else { return true }
+        if model.runtimeState(for: application) == .launching { return true }
+        return application.providerManagedState != nil
+            && application.providerManagedState != .installed
+            && model.runtimeState(for: application) == .idle
     }
 }
