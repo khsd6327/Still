@@ -53,7 +53,7 @@ Scripts/register-local-engine-build.sh \
 Still validates the ABI version, producer ownership, artifact hashes, and
 runtime paths before reporting the bridge as available. Default application
 launches use the direct bridge. Steam launches on this source-built runtime use
-the Raw ANGLE Wine path selected by `STILL_WINE_RAW_ANGLE=1`. The compatibility
+the Raw ANGLE Wine path selected by `STILL_STEAM_CEF_RAW_ANGLE=1`. The compatibility
 shim remains a Debug-only, explicitly enabled diagnostic tool.
 
 ## Storage location
@@ -67,3 +67,8 @@ engines are discovered from a version-root `still-engine.json` manifest. The
 manifest records the Wine executable and direct-bridge artifacts with their
 byte sizes, executable attributes, and SHA-256 digests. Still verifies the
 complete list before making the engine available for Environment selection.
+
+Verified compatibility profiles additionally require the exact engine ID and
+the SHA-256 digest of `still-engine.json`. The complete source, patch, bridge,
+MoltenVK, and artifact identity is recorded in
+`Documentation/Verified-Engine-Builds.json`.

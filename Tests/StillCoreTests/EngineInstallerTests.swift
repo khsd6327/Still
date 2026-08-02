@@ -90,6 +90,43 @@ final class EngineInstallerTests: XCTestCase {
         }
     }
 
+    func testArchiveExtractorRejectsSymbolicLinkOutsideEngineRoot() throws {
+        let rootURL = FileManager.default.temporaryDirectory
+            .appending(path: "StillUnsafeEngineArchiveTests")
+            .appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: rootURL) }
+        let sourceURL = rootURL.appending(path: "source")
+        let appURL = sourceURL.appending(path: "Wine Test.app")
+        try FileManager.default.createDirectory(
+            at: appURL,
+            withIntermediateDirectories: true
+        )
+        try FileManager.default.createSymbolicLink(
+            at: appURL.appending(path: "escape"),
+            withDestinationURL: URL(filePath: "/tmp")
+        )
+        let archiveURL = rootURL.appending(path: "unsafe.tar.xz")
+        try makeArchive(
+            sourceURL: sourceURL,
+            archiveURL: archiveURL,
+            itemName: "Wine Test.app"
+        )
+        let destinationURL = rootURL.appending(path: "destination")
+        try FileManager.default.createDirectory(
+            at: destinationURL,
+            withIntermediateDirectories: true
+        )
+
+        XCTAssertThrowsError(try TarXZArchiveExtractor().extract(
+            archiveURL: archiveURL,
+            destinationURL: destinationURL
+        )) { error in
+            guard case StillCoreError.invalidEngineArchive = error else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+        }
+    }
+
     func testDiscoversLocallyBuiltEngineFromVersionedManifest() async throws {
         let fileManager = FileManager.default
         let rootURL = fileManager.temporaryDirectory

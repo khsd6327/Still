@@ -1,0 +1,57 @@
+{
+  "contractID": "app.stillproject.verified-engine-builds",
+  "schemaVersion": 1,
+  "builds": [
+    {
+      "id": "still-wine-staging-11.14-dxmt-stable-3525d41",
+      "version": "11.14-stable1",
+      "artifactManifestSHA256": "eb82efc6e1b876d63352c835f39f8f47366dc62c818f6544b5f5c21884c83f88",
+      "bridgeManifestSHA256": "16b38117ebc91cfc326ee55588bc9eabe8292a01a9e3e73ffc0c498fa39c938c",
+      "bridgeABIVersion": 1,
+      "wine": {
+        "version": "11.14",
+        "tag": "wine-11.14",
+        "sourceCommit": "1012f3d99507b80d4869eabf0853567660a7ecbb"
+      },
+      "dxmt": {
+        "sourceCommit": "3525d41c71604ed07d796de5b58560e3cf6db944"
+      },
+      "moltenVK": {
+        "version": "1.4.0",
+        "sourceCommit": "458870543b9bcf6b0edd6f90aaa776707b310d96",
+        "artifactSHA256": "b74dcaded0c507d2b096b42bc1a636dc952f286fcac86cbe1fd0d552120cae6a"
+      },
+      "patches": [
+        {
+          "path": "Patches/dxmt-3525d41-direct-winemac-bridge.patch",
+          "sha256": "20642bd5dac4e6ac8eda11a255b33e40a1f3e4bebca2b6f209278ec69421eaba"
+        },
+        {
+          "path": "Patches/wine-11.14-cross-process-metal.patch",
+          "sha256": "316874163e43ef2ff11b126ca43f6445bd73406aa06faabf526e6399db0cdcf8"
+        },
+        {
+          "path": "Patches/wine-11.14-dxmt-macdrv-bridge.patch",
+          "sha256": "4914bd72812306f2022b581486f106b6b1ad0c8c9576626f5e64378e234fca17"
+        },
+        {
+          "path": "Patches/wine-11.14-stable-metal-export.patch",
+          "sha256": "a7f843e4853d2671d6d9f73ed0b575d66ca0a5e18b7da1c769f6ce177f4fb4da"
+        },
+        {
+          "path": "Patches/wine-11.14-steam-webhelper-angle.patch",
+          "sha256": "cbfb84706dbca8d0a85fa2f56666e1ee36142ad719ebad76974aebf87aa3293f"
+        }
+      ]
+    }
+  ],
+  "candidates": [
+    {
+      "id": "still-wine-staging-11.14-dxmt-stable-3525d41-mvk141-candidate",
+      "baseBuildID": "still-wine-staging-11.14-dxmt-stable-3525d41",
+      "moltenVKVersion": "1.4.1",
+      "moltenVKSourceCommit": "db445ff2042d9ce348c439ad8451112f354b8d2a",
+      "status": "unverified"
+    }
+  ]
+}

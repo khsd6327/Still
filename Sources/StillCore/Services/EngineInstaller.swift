@@ -5,6 +5,9 @@ public actor EngineInstaller {
     private let fileManager: FileManager
     private let archiveExtractor: TarXZArchiveExtractor
     private let urlSession: URLSession
+    private var licenseAcceptancesURL: URL {
+        rootURL.appending(path: "license-acceptances.json")
+    }
 
     public init(
         rootURL: URL = EngineLocations.defaultRootURL(),
@@ -28,6 +31,10 @@ public actor EngineInstaller {
         }
 
         if let installed = installedDescriptor(for: manifest) {
+            try recordLicenseAcceptanceIfNeeded(
+                manifest,
+                acceptsExternalLicense: acceptsExternalLicense
+            )
             return installed
         }
 
@@ -68,6 +75,10 @@ public actor EngineInstaller {
 
         let destinationURL = installationURL(for: manifest)
         if let installed = installedDescriptor(for: manifest) {
+            try recordLicenseAcceptanceIfNeeded(
+                manifest,
+                acceptsExternalLicense: acceptsExternalLicense
+            )
             return installed
         }
         guard !fileManager.fileExists(atPath: destinationURL.path) else {
@@ -106,7 +117,15 @@ public actor EngineInstaller {
         guard let descriptor = installedDescriptor(for: manifest) else {
             throw StillCoreError.invalidEngineInstallation(destinationURL)
         }
+        try recordLicenseAcceptanceIfNeeded(
+            manifest,
+            acceptsExternalLicense: acceptsExternalLicense
+        )
         return descriptor
+    }
+
+    public func acceptedLicenseIDs() -> Set<String> {
+        Set(loadLicenseAcceptances().map(\.engineID))
     }
 
     public func installedDescriptor(
@@ -359,5 +378,36 @@ public actor EngineInstaller {
         installationURL
             .appending(path: manifest.archiveRoot, directoryHint: .isDirectory)
             .appending(path: manifest.wineBinaryRelativePath)
+    }
+
+    private func recordLicenseAcceptanceIfNeeded(
+        _ manifest: EngineManifest,
+        acceptsExternalLicense: Bool
+    ) throws {
+        guard manifest.distributionPolicy == .externalLicenseRequired else { return }
+        guard acceptsExternalLicense, let licenseURL = manifest.licenseURL else {
+            throw StillCoreError.externalLicenseAcceptanceRequired(manifest.id)
+        }
+        var records = loadLicenseAcceptances()
+        records.removeAll { $0.engineID == manifest.id }
+        records.append(EngineLicenseAcceptance(
+            engineID: manifest.id,
+            engineVersion: manifest.version,
+            licenseURL: licenseURL
+        ))
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
+        try encoder.encode(records.sorted { $0.engineID < $1.engineID }).write(
+            to: licenseAcceptancesURL,
+            options: .atomic
+        )
+    }
+
+    private func loadLicenseAcceptances() -> [EngineLicenseAcceptance] {
+        guard let data = try? Data(contentsOf: licenseAcceptancesURL) else { return [] }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return (try? decoder.decode([EngineLicenseAcceptance].self, from: data)) ?? []
     }
 }

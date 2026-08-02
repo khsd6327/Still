@@ -10,6 +10,7 @@ public struct TarXZArchiveExtractor: Sendable {
             "-xJf", archiveURL.path,
             "-C", destinationURL.path
         ])
+        try validateExtractedTree(at: destinationURL)
     }
 
     private func listEntries(archiveURL: URL) throws -> [String] {
@@ -32,6 +33,57 @@ public struct TarXZArchiveExtractor: Sendable {
                 || normalized.contains("\0") {
                 throw StillCoreError.invalidEngineArchive(
                     "Unsafe archive entry: \(entry)"
+                )
+            }
+        }
+    }
+
+    private func validateExtractedTree(at rootURL: URL) throws {
+        let rootPath = rootURL.standardizedFileURL.path
+        let prefix = rootPath.hasSuffix("/") ? rootPath : rootPath + "/"
+        guard let enumerator = FileManager.default.enumerator(
+            at: rootURL,
+            includingPropertiesForKeys: [
+                .isDirectoryKey, .isRegularFileKey, .isSymbolicLinkKey
+            ],
+            options: []
+        ) else {
+            throw StillCoreError.invalidEngineArchive(
+                "The extracted archive could not be enumerated."
+            )
+        }
+        for case let url as URL in enumerator {
+            let values = try url.resourceValues(forKeys: [
+                .isDirectoryKey, .isRegularFileKey, .isSymbolicLinkKey
+            ])
+            if values.isSymbolicLink == true {
+                let target = try FileManager.default.destinationOfSymbolicLink(
+                    atPath: url.path
+                )
+                let resolved: URL
+                if target.hasPrefix("/") {
+                    resolved = URL(filePath: target)
+                } else {
+                    resolved = url.deletingLastPathComponent().appending(path: target)
+                }
+                let resolvedPath = resolved.standardizedFileURL.path
+                guard resolvedPath == rootPath || resolvedPath.hasPrefix(prefix) else {
+                    throw StillCoreError.invalidEngineArchive(
+                        "An extracted symbolic link leaves the engine root."
+                    )
+                }
+                enumerator.skipDescendants()
+                continue
+            }
+            guard values.isDirectory == true || values.isRegularFile == true else {
+                throw StillCoreError.invalidEngineArchive(
+                    "The engine archive contains a special filesystem entry."
+                )
+            }
+            let path = url.standardizedFileURL.path
+            guard path.hasPrefix(prefix) else {
+                throw StillCoreError.invalidEngineArchive(
+                    "An extracted entry leaves the engine root."
                 )
             }
         }

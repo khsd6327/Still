@@ -67,3 +67,23 @@ public struct EngineManifest: Codable, Hashable, Identifiable, Sendable {
         self.licenseURL = licenseURL
     }
 }
+
+public struct EngineLicenseAcceptance: Codable, Hashable, Identifiable, Sendable {
+    public var id: String { engineID }
+    public let engineID: String
+    public let engineVersion: String
+    public let licenseURL: URL
+    public let acceptedAt: Date
+
+    public init(
+        engineID: String,
+        engineVersion: String,
+        licenseURL: URL,
+        acceptedAt: Date = .now
+    ) {
+        self.engineID = engineID
+        self.engineVersion = engineVersion
+        self.licenseURL = licenseURL
+        self.acceptedAt = acceptedAt
+    }
+}
