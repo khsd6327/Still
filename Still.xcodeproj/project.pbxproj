@@ -56,6 +56,7 @@
 		5E612AFA431EB6ED21BEB883 /* CapabilityRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F226E7B0AA09DD7D6A88A82 /* CapabilityRegistry.swift */; };
 		616B5B4F6DF428E9EABAED3B /* JSONBottleStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B80270DE89381BF90EC70E1D /* JSONBottleStoreTests.swift */; };
 		647BBEDC388F3CB07E937EEF /* ProcessSupervisor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59367E2D537F173E9466514F /* ProcessSupervisor.swift */; };
+		A1B2C3D4E5F60718293A4B5D /* HostProcessTerminator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B5C /* HostProcessTerminator.swift */; };
 		67EDA103792A74378B58740D /* EngineInstaller.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6038FF4C1E066D257E255DF /* EngineInstaller.swift */; };
 		6DBF20783C96DDAA77EB71AC /* ValveKeyValueParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E655A331D6FF2F02D28DFF1 /* ValveKeyValueParserTests.swift */; };
 		6ECCD45212A69BEF5430CE11 /* JSONApplicationPinStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA309E592274888F85711621 /* JSONApplicationPinStoreTests.swift */; };
@@ -202,6 +203,7 @@
 		568DE663644743DD8BE985D3 /* LogRotationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogRotationService.swift; sourceTree = "<group>"; };
 		57828174F87767B29893CB42 /* BundledEngineCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BundledEngineCatalog.swift; sourceTree = "<group>"; };
 		59367E2D537F173E9466514F /* ProcessSupervisor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessSupervisor.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60718293A4B5C /* HostProcessTerminator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostProcessTerminator.swift; sourceTree = "<group>"; };
 		59413BA37A7EF7F22E7835F0 /* StillStoreMigrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StillStoreMigrationTests.swift; sourceTree = "<group>"; };
 		5A3C489653597F75D2E724CC /* CompatibilityProfileMatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompatibilityProfileMatcher.swift; sourceTree = "<group>"; };
 		5C8680B9AE12771AA5107433 /* RestorePointService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RestorePointService.swift; sourceTree = "<group>"; };
@@ -372,6 +374,7 @@
 				04C599C356ED1A317486DC30 /* EnvironmentRecoveryService.swift */,
 				7596AFA2AA56E110A5BAFEA5 /* EnvironmentRestoreCoordinator.swift */,
 				1B3E91F092131B1C5C303C4D /* FileTreeServices.swift */,
+				A1B2C3D4E5F60718293A4B5C /* HostProcessTerminator.swift */,
 				986DA5066A2FDFA5487D4BF3 /* JSONApplicationPinStore.swift */,
 				8C95F7221EE83F1953902225 /* JSONBottleStore.swift */,
 				7A4D039E843D38939E7A34C4 /* JSONStillStore.swift */,
@@ -686,6 +689,7 @@
 				9B858DB6BACAFC6BB59A98E1 /* EnvironmentRecoveryService.swift in Sources */,
 				FA3CC46A3123038886EDB77C /* EnvironmentRestoreCoordinator.swift in Sources */,
 				87042FC9102CD3EE92356E8E /* FileTreeServices.swift in Sources */,
+				A1B2C3D4E5F60718293A4B5D /* HostProcessTerminator.swift in Sources */,
 				E196D53E2663386600FCE9BE /* GraphicsBackend.swift in Sources */,
 				D3F1AAB99610417E12AB2783 /* InstalledEngineBuildManifest.swift in Sources */,
 				1F841839337C696A4F5E553F /* InstalledWindowsApplication.swift in Sources */,

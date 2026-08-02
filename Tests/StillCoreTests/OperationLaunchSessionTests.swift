@@ -198,6 +198,56 @@ final class OperationLaunchSessionTests: XCTestCase {
         XCTAssertTrue(activeSessions.isEmpty)
     }
 
+    func testApplicationScopedTerminationLeavesOtherSessionRunning() async throws {
+        let rootURL = temporaryRoot("ApplicationScope")
+        let firstExecutableURL = rootURL.appending(path: "first/sleep")
+        let secondExecutableURL = rootURL.appending(path: "second/sleep")
+        defer { try? FileManager.default.removeItem(at: rootURL) }
+        try FileManager.default.createDirectory(
+            at: firstExecutableURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try FileManager.default.createDirectory(
+            at: secondExecutableURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try FileManager.default.copyItem(at: URL(filePath: "/bin/sleep"), to: firstExecutableURL)
+        try FileManager.default.copyItem(at: URL(filePath: "/bin/sleep"), to: secondExecutableURL)
+
+        let supervisor = ProcessSupervisor()
+        let first = try await supervisor.launch(ProcessPlan(
+            applicationID: UUID(),
+            environmentID: UUID(),
+            executableURL: firstExecutableURL,
+            arguments: ["5"],
+            logURL: rootURL.appending(path: "first.log"),
+            terminationPlan: ProcessTerminationPlan(
+                scopeIdentifier: rootURL.path,
+                hostProcessPathPrefix: firstExecutableURL.path,
+                gracefulExecutableURL: URL(filePath: "/usr/bin/true"),
+                gracefulArguments: [],
+                forceExecutableURL: URL(filePath: "/usr/bin/true"),
+                forceArguments: [],
+                environment: [:]
+            )
+        ))
+        let second = try await supervisor.launch(ProcessPlan(
+            applicationID: UUID(),
+            environmentID: UUID(),
+            executableURL: secondExecutableURL,
+            arguments: ["5"],
+            logURL: rootURL.appending(path: "second.log")
+        ))
+
+        try await supervisor.stop(sessionID: first.id)
+
+        let firstState = await supervisor.session(id: first.id)?.state
+        let secondState = await supervisor.session(id: second.id)?.state
+        XCTAssertEqual(firstState, .exited)
+        XCTAssertEqual(secondState, .running)
+        try await supervisor.forceStop(sessionID: second.id)
+    }
+
     func testCompletedSessionCannotReplayItsTerminationPlan() async throws {
         let rootURL = temporaryRoot("ExitedMonitor")
         defer { try? FileManager.default.removeItem(at: rootURL) }

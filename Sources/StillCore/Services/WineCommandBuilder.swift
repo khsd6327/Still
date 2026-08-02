@@ -28,6 +28,11 @@ public enum WineCommandBuilder {
             logURL: logURL,
             terminationPlan: ProcessTerminationPlan(
                 scopeIdentifier: request.bottle.prefixURL.standardizedFileURL.path,
+                hostProcessPathPrefix: windowsDirectoryPrefix(
+                    request.workingDirectoryURL
+                        ?? request.executableURL.deletingLastPathComponent(),
+                    bottle: request.bottle
+                ),
                 gracefulExecutableURL: engine.wineBinaryURL,
                 gracefulArguments: ["wineboot", "--end-session"],
                 forceExecutableURL: engine.wineBinaryURL
@@ -42,6 +47,18 @@ public enum WineCommandBuilder {
                 workingDirectoryURL: request.bottle.prefixURL
             )
         )
+    }
+
+    static func windowsDirectoryPrefix(_ directoryURL: URL, bottle: Bottle) -> String? {
+        let driveCURL = bottle.prefixURL
+            .appending(path: "drive_c", directoryHint: .isDirectory)
+            .standardizedFileURL
+        let directory = directoryURL.standardizedFileURL
+        let driveCPath = driveCURL.path.hasSuffix("/") ? driveCURL.path : driveCURL.path + "/"
+        guard directory.path.hasPrefix(driveCPath) else { return nil }
+        let relativePath = directory.path.dropFirst(driveCPath.count)
+        let windowsPath = relativePath.replacingOccurrences(of: "/", with: "\\")
+        return "C:\\" + windowsPath + (windowsPath.hasSuffix("\\") ? "" : "\\")
     }
 
     public static func preparePlan(

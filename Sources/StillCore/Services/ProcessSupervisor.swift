@@ -129,9 +129,22 @@ public actor ProcessSupervisor {
                 force: force,
                 logURL: managed.session.logURL
             )
-            let matchingIDs = processes.compactMap { id, candidate in
-                candidate.terminationPlan?.scopeIdentifier
-                    == terminationPlan.scopeIdentifier ? id : nil
+            let matchingIDs: [LaunchSession.ID]
+            if terminationPlan.hostProcessPathPrefix == nil {
+                matchingIDs = processes.compactMap { id, candidate in
+                    candidate.terminationPlan?.scopeIdentifier
+                        == terminationPlan.scopeIdentifier ? id : nil
+                }
+            } else {
+                matchingIDs = [sessionID]
+                if managed.process.isRunning {
+                    if force {
+                        Darwin.kill(managed.process.processIdentifier, SIGKILL)
+                    } else {
+                        managed.process.terminate()
+                    }
+                    managed.process.waitUntilExit()
+                }
             }
             for id in matchingIDs {
                 guard var candidate = processes[id], candidate.session.state == .running else {
@@ -220,6 +233,13 @@ public actor ProcessSupervisor {
         force: Bool,
         logURL: URL?
     ) throws {
+        if let hostProcessPathPrefix = plan.hostProcessPathPrefix {
+            _ = try HostProcessTerminator.terminateProcesses(
+                matchingWindowsPathPrefix: hostProcessPathPrefix,
+                force: force
+            )
+            return
+        }
         let process = Process()
         process.executableURL = force
             ? plan.forceExecutableURL

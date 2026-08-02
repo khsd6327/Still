@@ -42,6 +42,7 @@ final class WineProcessTests: XCTestCase {
         XCTAssertNil(plan.environment["SSH_AUTH_SOCK"])
         XCTAssertNil(plan.environment["NODE_REPL_TRUSTED_BROWSER_CLIENT_SHA256S"])
         XCTAssertEqual(plan.terminationPlan?.scopeIdentifier, "/tmp/Still Bottle")
+        XCTAssertNil(plan.terminationPlan?.hostProcessPathPrefix)
         XCTAssertEqual(plan.terminationPlan?.gracefulArguments, ["wineboot", "--end-session"])
         XCTAssertEqual(plan.terminationPlan?.forceArguments, ["-k", "-w"])
         XCTAssertEqual(
@@ -49,6 +50,58 @@ final class WineProcessTests: XCTestCase {
             URL(filePath: "/opt/wine/bin/wineserver")
         )
         XCTAssertEqual(plan.terminationPlan?.monitorArguments, ["-w"])
+    }
+
+    func testLaunchPlanScopesHostTerminationToWindowsWorkingDirectory() {
+        let bottle = Bottle(
+            name: "Steam",
+            prefixURL: URL(filePath: "/tmp/Still Bottle"),
+            engineID: "wine-test"
+        )
+        let engine = EngineDescriptor(
+            id: "wine-test",
+            displayName: "Test Wine",
+            version: "1",
+            wineBinaryURL: URL(filePath: "/opt/wine/bin/wine64"),
+            capabilities: [.win64]
+        )
+        let gameDirectory = bottle.prefixURL.appending(
+            path: "drive_c/Program Files (x86)/Steam/steamapps/common/ChaosMarket"
+        )
+
+        let plan = WineCommandBuilder.launchPlan(
+            engine: engine,
+            request: LaunchRequest(
+                bottle: bottle,
+                executableURL: gameDirectory.appending(path: "Supermarket Chaos.exe"),
+                workingDirectoryURL: gameDirectory
+            ),
+            logURL: URL(filePath: "/tmp/still.log")
+        )
+
+        XCTAssertEqual(
+            plan.terminationPlan?.hostProcessPathPrefix,
+            "C:\\Program Files (x86)\\Steam\\steamapps\\common\\ChaosMarket\\"
+        )
+    }
+
+    func testHostProcessListParserPreservesCommandLine() {
+        let output = """
+              42 C:\\Games\\Example\\game.exe --windowed
+             105 /usr/bin/true
+            invalid
+            """
+
+        XCTAssertEqual(
+            HostProcessTerminator.parseProcessList(output),
+            [
+                HostProcessRecord(
+                    processIdentifier: 42,
+                    command: "C:\\Games\\Example\\game.exe --windowed"
+                ),
+                HostProcessRecord(processIdentifier: 105, command: "/usr/bin/true")
+            ]
+        )
     }
 
     func testNormalAndForceStopPlansAreDistinct() {

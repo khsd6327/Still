@@ -2,6 +2,7 @@ import Foundation
 
 public struct ProcessTerminationPlan: Sendable {
     public let scopeIdentifier: String
+    public let hostProcessPathPrefix: String?
     public let gracefulExecutableURL: URL
     public let gracefulArguments: [String]
     public let forceExecutableURL: URL
@@ -14,6 +15,7 @@ public struct ProcessTerminationPlan: Sendable {
 
     public init(
         scopeIdentifier: String,
+        hostProcessPathPrefix: String? = nil,
         gracefulExecutableURL: URL,
         gracefulArguments: [String],
         forceExecutableURL: URL,
@@ -25,6 +27,7 @@ public struct ProcessTerminationPlan: Sendable {
         acceptedExitCodes: Set<Int32> = [0, 1]
     ) {
         self.scopeIdentifier = scopeIdentifier
+        self.hostProcessPathPrefix = hostProcessPathPrefix
         self.gracefulExecutableURL = gracefulExecutableURL
         self.gracefulArguments = gracefulArguments
         self.forceExecutableURL = forceExecutableURL
