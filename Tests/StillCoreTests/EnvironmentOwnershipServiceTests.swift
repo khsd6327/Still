@@ -72,6 +72,38 @@ final class EnvironmentOwnershipServiceTests: XCTestCase {
         )
     }
 
+    func testManagedMarkerRejectsCopiedMarkerOnReplacementDirectory() throws {
+        let root = temporaryRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let service = EnvironmentOwnershipService(managedRootURL: root)
+        let environmentID = UUID()
+        let environment = WindowsEnvironment(
+            id: environmentID,
+            name: "Managed",
+            prefixURL: service.managedPrefixURL(for: environmentID),
+            ownership: .managed,
+            managementNonce: UUID()
+        )
+        let storeIdentifier = UUID()
+        try service.writeMarker(for: environment, storeIdentifier: storeIdentifier)
+        let markerURL = environment.prefixURL.appending(
+            path: EnvironmentOwnershipService.markerFilename
+        )
+        let markerData = try Data(contentsOf: markerURL)
+        let originalURL = root.appending(path: "Original")
+        try FileManager.default.moveItem(at: environment.prefixURL, to: originalURL)
+        try FileManager.default.createDirectory(
+            at: environment.prefixURL,
+            withIntermediateDirectories: true
+        )
+        try markerData.write(to: markerURL)
+
+        XCTAssertThrowsError(try service.validateManagedOwnership(
+            of: environment,
+            storeIdentifier: storeIdentifier
+        ))
+    }
+
     func testLegacyEnvironmentDecodesWithUnknownOwnership() throws {
         let id = UUID()
         let json = """

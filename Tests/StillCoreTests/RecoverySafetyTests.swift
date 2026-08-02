@@ -1,8 +1,69 @@
+import Darwin
 import Foundation
 import XCTest
 @testable import StillCore
 
 final class RecoverySafetyTests: XCTestCase {
+    func testBackupPreservesHiddenDirectoriesHardLinksAndExtendedAttributes() async throws {
+        let root = temporaryRoot("BackupMetadata")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let prefix = root.appending(path: "Prefix")
+        let hiddenDirectory = prefix.appending(path: ".config/empty")
+        try FileManager.default.createDirectory(
+            at: hiddenDirectory,
+            withIntermediateDirectories: true
+        )
+        let first = prefix.appending(path: ".config/data.bin")
+        let linked = prefix.appending(path: ".config/data-linked.bin")
+        try write("shared-data", to: first)
+        try FileManager.default.linkItem(at: first, to: linked)
+        try setExtendedAttribute("com.stillproject.test", data: Data("metadata".utf8), at: first)
+
+        let environment = WindowsEnvironment(name: "Metadata", prefixURL: prefix)
+        let backupURL = root.appending(path: "Metadata.stillbackup")
+        let service = BackupService()
+        let preview = try await service.preview(
+            environment: environment,
+            applications: [],
+            launchEntries: [],
+            components: [],
+            destinationURL: backupURL,
+            encrypted: false
+        )
+        _ = try await service.create(preview: preview, activeSessions: [])
+
+        let restored = root.appending(path: "Restored")
+        _ = try await service.restore(
+            backupURL: backupURL,
+            destinationPrefixURL: restored,
+            activeSessions: []
+        )
+
+        var isDirectory: ObjCBool = false
+        XCTAssertTrue(FileManager.default.fileExists(
+            atPath: restored.appending(path: ".config/empty").path,
+            isDirectory: &isDirectory
+        ))
+        XCTAssertTrue(isDirectory.boolValue)
+        let firstAttributes = try FileManager.default.attributesOfItem(
+            atPath: restored.appending(path: ".config/data.bin").path
+        )
+        let linkedAttributes = try FileManager.default.attributesOfItem(
+            atPath: restored.appending(path: ".config/data-linked.bin").path
+        )
+        XCTAssertEqual(
+            firstAttributes[.systemFileNumber] as? NSNumber,
+            linkedAttributes[.systemFileNumber] as? NSNumber
+        )
+        XCTAssertEqual(
+            try extendedAttribute(
+                "com.stillproject.test",
+                at: restored.appending(path: ".config/data.bin")
+            ),
+            Data("metadata".utf8)
+        )
+    }
+
     func testRestorePointRequiresStoppedEnvironmentAndNeverAutoDeletesAtLimit() async throws {
         let root = temporaryRoot("RestorePoint")
         defer { try? FileManager.default.removeItem(at: root) }
@@ -546,6 +607,32 @@ final class RecoverySafetyTests: XCTestCase {
             withIntermediateDirectories: true
         )
         try Data(value.utf8).write(to: url)
+    }
+
+    private func setExtendedAttribute(_ name: String, data: Data, at url: URL) throws {
+        try url.withUnsafeFileSystemRepresentation { path in
+            guard let path else { throw POSIXError(.EINVAL) }
+            try name.withCString { attributeName in
+                let result = data.withUnsafeBytes { bytes in
+                    setxattr(path, attributeName, bytes.baseAddress, bytes.count, 0, 0)
+                }
+                guard result == 0 else { throw POSIXError(.EIO) }
+            }
+        }
+    }
+
+    private func extendedAttribute(_ name: String, at url: URL) throws -> Data {
+        try url.withUnsafeFileSystemRepresentation { path in
+            guard let path else { throw POSIXError(.EINVAL) }
+            return try name.withCString { attributeName in
+                let count = getxattr(path, attributeName, nil, 0, 0, 0)
+                guard count >= 0 else { throw POSIXError(.EIO) }
+                var bytes = [UInt8](repeating: 0, count: count)
+                let actual = getxattr(path, attributeName, &bytes, bytes.count, 0, 0)
+                guard actual == count else { throw POSIXError(.EIO) }
+                return Data(bytes)
+            }
+        }
     }
 }
 

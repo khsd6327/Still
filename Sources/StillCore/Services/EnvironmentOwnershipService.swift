@@ -1,23 +1,37 @@
+import Darwin
 import Foundation
 
+public struct ManagedEnvironmentFileIdentity: Codable, Equatable, Sendable {
+    public let device: UInt64
+    public let inode: UInt64
+
+    public init(device: UInt64, inode: UInt64) {
+        self.device = device
+        self.inode = inode
+    }
+}
+
 public struct ManagedEnvironmentMarker: Codable, Equatable, Sendable {
-    public static let currentVersion = 1
+    public static let currentVersion = 2
 
     public let version: Int
     public let environmentID: WindowsEnvironment.ID
     public let storeIdentifier: UUID
     public let nonce: UUID
+    public let fileIdentity: ManagedEnvironmentFileIdentity?
 
     public init(
         version: Int = Self.currentVersion,
         environmentID: WindowsEnvironment.ID,
         storeIdentifier: UUID,
-        nonce: UUID
+        nonce: UUID,
+        fileIdentity: ManagedEnvironmentFileIdentity? = nil
     ) {
         self.version = version
         self.environmentID = environmentID
         self.storeIdentifier = storeIdentifier
         self.nonce = nonce
+        self.fileIdentity = fileIdentity
     }
 }
 
@@ -61,7 +75,8 @@ public struct EnvironmentOwnershipService: @unchecked Sendable {
         let marker = ManagedEnvironmentMarker(
             environmentID: environment.id,
             storeIdentifier: storeIdentifier,
-            nonce: nonce
+            nonce: nonce,
+            fileIdentity: try fileIdentity(at: environment.prefixURL)
         )
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -107,13 +122,31 @@ public struct EnvironmentOwnershipService: @unchecked Sendable {
             ManagedEnvironmentMarker.self,
             from: Data(contentsOf: markerURL)
         )
-        guard marker.version == ManagedEnvironmentMarker.currentVersion,
+        guard (1 ... ManagedEnvironmentMarker.currentVersion).contains(marker.version),
               marker.environmentID == environmentID,
               marker.storeIdentifier == storeIdentifier,
               marker.nonce == nonce else {
             throw StillCoreError.invalidStore(
                 "The Environment ownership marker does not match the store record."
             )
+        }
+        let currentIdentity = try fileIdentity(at: prefixURL)
+        if let recordedIdentity = marker.fileIdentity {
+            guard recordedIdentity == currentIdentity else {
+                throw StillCoreError.invalidStore(
+                    "The Environment directory identity does not match its ownership marker."
+                )
+            }
+        } else {
+            let upgraded = ManagedEnvironmentMarker(
+                environmentID: environmentID,
+                storeIdentifier: storeIdentifier,
+                nonce: nonce,
+                fileIdentity: currentIdentity
+            )
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            try encoder.encode(upgraded).write(to: markerURL, options: .atomic)
         }
     }
 
@@ -148,5 +181,24 @@ public struct EnvironmentOwnershipService: @unchecked Sendable {
 
     private func markerURL(for prefixURL: URL) -> URL {
         prefixURL.appending(path: Self.markerFilename)
+    }
+
+    private func fileIdentity(at url: URL) throws -> ManagedEnvironmentFileIdentity {
+        try url.withUnsafeFileSystemRepresentation { path in
+            guard let path else { throw StillCoreError.invalidStore("A managed path is invalid.") }
+            var status = stat()
+            guard lstat(path, &status) == 0 else {
+                throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+            }
+            guard (status.st_mode & S_IFMT) == S_IFDIR else {
+                throw StillCoreError.invalidStore(
+                    "The managed Environment path is not a directory."
+                )
+            }
+            return ManagedEnvironmentFileIdentity(
+                device: UInt64(status.st_dev),
+                inode: UInt64(status.st_ino)
+            )
+        }
     }
 }

@@ -1,4 +1,5 @@
 import CryptoKit
+import Darwin
 import Foundation
 import Security
 
@@ -6,6 +7,8 @@ private struct BackupFileEntry {
     enum Kind {
         case regularFile
         case symbolicLink(target: String)
+        case hardLink(targetRelativePath: String)
+        case directory
     }
 
     let sourceURL: URL
@@ -13,6 +16,7 @@ private struct BackupFileEntry {
     let permissions: Int
     let byteCount: Int64
     let sha256: String
+    let extendedAttributes: [String: Data]
     let kind: Kind
 }
 
@@ -21,11 +25,23 @@ private struct BackupFileMetadata: Codable {
     let permissions: Int
     let byteCount: Int64
     let sha256: String
+    let extendedAttributes: [String: Data]?
 }
 
 private struct BackupSymbolicLinkMetadata: Codable {
     let relativePath: String
     let target: String
+}
+
+private struct BackupHardLinkMetadata: Codable {
+    let relativePath: String
+    let targetRelativePath: String
+}
+
+private struct BackupDirectoryMetadata: Codable {
+    let relativePath: String
+    let permissions: Int
+    let extendedAttributes: [String: Data]
 }
 
 private struct LegacyBackupFileRecord: Codable {
@@ -75,7 +91,7 @@ private struct BackupKeyDerivation: Codable {
 
 private struct BackupContainerHeader: Codable {
     static let contract = "app.stillproject.backup"
-    static let currentVersion = 3
+    static let currentVersion = 4
     static let supportedVersions = 2 ... currentVersion
 
     let contractID: String
@@ -92,6 +108,8 @@ private enum BackupFrameKind: UInt8 {
     case fileChunk = 3
     case fileEnd = 4
     case symbolicLinkMetadata = 5
+    case hardLinkMetadata = 6
+    case directoryMetadata = 7
     case archiveEnd = 255
 }
 
@@ -388,7 +406,7 @@ private final class BackupContainerReader {
         switch kind {
         case .manifest:
             return Self.maximumManifestSize + authenticationBytes
-        case .fileMetadata, .symbolicLinkMetadata:
+        case .fileMetadata, .symbolicLinkMetadata, .hardLinkMetadata, .directoryMetadata:
             return Self.maximumMetadataSize + authenticationBytes
         case .fileChunk:
             return BackupContainerWriter.chunkByteCount + authenticationBytes
@@ -402,7 +420,7 @@ private final class BackupContainerReader {
         switch kind {
         case .manifest:
             valid = (1 ... Self.maximumManifestSize).contains(count)
-        case .fileMetadata, .symbolicLinkMetadata:
+        case .fileMetadata, .symbolicLinkMetadata, .hardLinkMetadata, .directoryMetadata:
             valid = (1 ... Self.maximumMetadataSize).contains(count)
         case .fileChunk:
             valid = (1 ... BackupContainerWriter.chunkByteCount).contains(count)
@@ -492,8 +510,8 @@ public actor BackupService {
                     "Browser cookies and account tokens",
                     "Windows user documents"
                 ],
-                fileCount: entries.count,
-                byteCount: entries.reduce(0) { $0 + $1.byteCount }
+                fileCount: manifestFileCount(entries),
+                byteCount: manifestByteCount(entries)
             ),
             destinationURL: destinationURL,
             isEncrypted: encrypted
@@ -509,8 +527,8 @@ public actor BackupService {
         let environment = preview.manifest.environment
         try requireStopped(environment.id, sessions: activeSessions)
         let entries = try fileEntries(at: environment.prefixURL)
-        guard entries.count == preview.manifest.fileCount,
-              entries.reduce(0, { $0 + $1.byteCount }) == preview.manifest.byteCount else {
+        guard manifestFileCount(entries) == preview.manifest.fileCount,
+              manifestByteCount(entries) == preview.manifest.byteCount else {
             throw StillCoreError.verificationFailed(
                 "The Environment changed after the backup preview was created."
             )
@@ -542,7 +560,8 @@ public actor BackupService {
                         relativePath: entry.relativePath,
                         permissions: entry.permissions,
                         byteCount: entry.byteCount,
-                        sha256: entry.sha256
+                        sha256: entry.sha256,
+                        extendedAttributes: entry.extendedAttributes
                     )
                     try writer.write(
                         kind: .fileMetadata,
@@ -556,6 +575,23 @@ public actor BackupService {
                         payload: encoder.encode(BackupSymbolicLinkMetadata(
                             relativePath: entry.relativePath,
                             target: target
+                        ))
+                    )
+                case .hardLink(let targetRelativePath):
+                    try writer.write(
+                        kind: .hardLinkMetadata,
+                        payload: encoder.encode(BackupHardLinkMetadata(
+                            relativePath: entry.relativePath,
+                            targetRelativePath: targetRelativePath
+                        ))
+                    )
+                case .directory:
+                    try writer.write(
+                        kind: .directoryMetadata,
+                        payload: encoder.encode(BackupDirectoryMetadata(
+                            relativePath: entry.relativePath,
+                            permissions: entry.permissions,
+                            extendedAttributes: entry.extendedAttributes
                         ))
                     )
                 }
@@ -658,6 +694,8 @@ public actor BackupService {
             var fileCount = 0
             var paths = Set<String>()
             var symbolicLinks: [BackupSymbolicLinkMetadata] = []
+            var hardLinks: [BackupHardLinkMetadata] = []
+            var directories: [BackupDirectoryMetadata] = []
 
             while true {
                 let frame = try reader.readFrame()
@@ -714,6 +752,44 @@ public actor BackupService {
                     }
                     symbolicLinks.append(value)
                     fileCount += 1
+                case .hardLinkMetadata:
+                    guard reader.containerVersion >= 4, metadata == nil else {
+                        throw StillCoreError.invalidStore(
+                            "The backup contains an unexpected hard-link record."
+                        )
+                    }
+                    let value = try decoder.decode(
+                        BackupHardLinkMetadata.self,
+                        from: frame.payload
+                    )
+                    try validate(relativePath: value.relativePath)
+                    try validate(relativePath: value.targetRelativePath)
+                    guard value.relativePath != value.targetRelativePath,
+                          paths.insert(value.relativePath).inserted else {
+                        throw StillCoreError.invalidStore(
+                            "The backup contains an invalid hard-link path."
+                        )
+                    }
+                    hardLinks.append(value)
+                    fileCount += 1
+                case .directoryMetadata:
+                    guard reader.containerVersion >= 4, metadata == nil else {
+                        throw StillCoreError.invalidStore(
+                            "The backup contains an unexpected directory record."
+                        )
+                    }
+                    let value = try decoder.decode(
+                        BackupDirectoryMetadata.self,
+                        from: frame.payload
+                    )
+                    try validate(relativePath: value.relativePath)
+                    try validateExtendedAttributes(value.extendedAttributes)
+                    guard paths.insert(value.relativePath).inserted else {
+                        throw StillCoreError.invalidStore(
+                            "The backup contains duplicate paths."
+                        )
+                    }
+                    directories.append(value)
                 case .fileChunk:
                     guard let current = metadata, var currentHasher = hasher,
                           let outputHandle else {
@@ -753,6 +829,10 @@ public actor BackupService {
                         [.posixPermissions: current.permissions],
                         ofItemAtPath: outputURL.path
                     )
+                    try restoreExtendedAttributes(
+                        current.extendedAttributes ?? [:],
+                        at: outputURL
+                    )
                     totalByteCount += restoredByteCount
                     fileCount += 1
                     metadata = nil
@@ -770,6 +850,8 @@ public actor BackupService {
                             "The restored file set does not match the manifest."
                         )
                     }
+                    try restoreDirectories(directories, under: stagingURL)
+                    try restoreHardLinks(hardLinks, under: stagingURL)
                     try restoreSymbolicLinks(symbolicLinks, under: stagingURL)
                     try fileManager.moveItem(at: stagingURL, to: destinationPrefixURL)
                     return manifest
@@ -819,17 +901,18 @@ public actor BackupService {
         guard let enumerator = fileManager.enumerator(
             at: rootURL,
             includingPropertiesForKeys: [
-                .isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey
+                .isRegularFileKey, .isSymbolicLinkKey, .isDirectoryKey, .fileSizeKey
             ],
-            options: [.skipsHiddenFiles]
+            options: []
         ) else { return [] }
         var entries: [BackupFileEntry] = []
+        var firstHardLinkPaths: [String: String] = [:]
         for case let url as URL in enumerator {
             let symbolicLinkTarget = try? fileManager.destinationOfSymbolicLink(
                 atPath: url.path
             )
             let values = try url.resourceValues(
-                forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey]
+                forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .isDirectoryKey, .fileSizeKey]
             )
             let relative = try symbolicLinkTarget != nil
                 ? FileTreeServices.lexicalRelativePath(of: url, under: rootURL)
@@ -849,14 +932,47 @@ public actor BackupService {
                     permissions: 0,
                     byteCount: 0,
                     sha256: "",
+                    extendedAttributes: [:],
                     kind: .symbolicLink(target: target)
                 ))
                 enumerator.skipDescendants()
                 continue
             }
+            let attributes = try fileManager.attributesOfItem(atPath: url.path)
+            if values.isDirectory == true {
+                entries.append(BackupFileEntry(
+                    sourceURL: url,
+                    relativePath: relative,
+                    permissions: attributes[.posixPermissions] as? Int ?? 0o755,
+                    byteCount: 0,
+                    sha256: "",
+                    extendedAttributes: try extendedAttributes(at: url),
+                    kind: .directory
+                ))
+                continue
+            }
             guard values.isRegularFile == true,
                   values.isSymbolicLink != true else { continue }
-            let attributes = try fileManager.attributesOfItem(atPath: url.path)
+            let hardLinkKey = [attributes[.systemNumber], attributes[.systemFileNumber]]
+                .compactMap { ($0 as? NSNumber)?.stringValue }
+                .joined(separator: ":")
+            if (attributes[.referenceCount] as? NSNumber)?.intValue ?? 1 > 1,
+               !hardLinkKey.isEmpty,
+               let target = firstHardLinkPaths[hardLinkKey] {
+                entries.append(BackupFileEntry(
+                    sourceURL: url,
+                    relativePath: relative,
+                    permissions: attributes[.posixPermissions] as? Int ?? 0o644,
+                    byteCount: 0,
+                    sha256: "",
+                    extendedAttributes: [:],
+                    kind: .hardLink(targetRelativePath: target)
+                ))
+                continue
+            }
+            if !hardLinkKey.isEmpty {
+                firstHardLinkPaths[hardLinkKey] = relative
+            }
             let byteCount = (attributes[.size] as? NSNumber)?.int64Value
                 ?? Int64(values.fileSize ?? 0)
             entries.append(BackupFileEntry(
@@ -865,10 +981,22 @@ public actor BackupService {
                 permissions: attributes[.posixPermissions] as? Int ?? 0o644,
                 byteCount: byteCount,
                 sha256: try SHA256Verifier.digest(of: url),
+                extendedAttributes: try extendedAttributes(at: url),
                 kind: .regularFile
             ))
         }
         return entries.sorted { $0.relativePath < $1.relativePath }
+    }
+
+    private func manifestFileCount(_ entries: [BackupFileEntry]) -> Int {
+        entries.reduce(into: 0) { result, entry in
+            if case .directory = entry.kind { return }
+            result += 1
+        }
+    }
+
+    private func manifestByteCount(_ entries: [BackupFileEntry]) -> Int64 {
+        entries.reduce(0) { $0 + $1.byteCount }
     }
 
     private func shouldExclude(_ relativePath: String) -> Bool {
@@ -916,6 +1044,132 @@ public actor BackupService {
             try fileManager.createSymbolicLink(
                 atPath: outputURL.path,
                 withDestinationPath: symbolicLink.target
+            )
+        }
+    }
+
+    private func restoreDirectories(
+        _ directories: [BackupDirectoryMetadata],
+        under rootURL: URL
+    ) throws {
+        for directory in directories.sorted(by: {
+            $0.relativePath.split(separator: "/").count
+                < $1.relativePath.split(separator: "/").count
+        }) {
+            let outputURL = rootURL.appending(path: directory.relativePath)
+            try fileManager.createDirectory(
+                at: outputURL,
+                withIntermediateDirectories: true
+            )
+            try fileManager.setAttributes(
+                [.posixPermissions: directory.permissions],
+                ofItemAtPath: outputURL.path
+            )
+            try restoreExtendedAttributes(directory.extendedAttributes, at: outputURL)
+        }
+    }
+
+    private func restoreHardLinks(
+        _ hardLinks: [BackupHardLinkMetadata],
+        under rootURL: URL
+    ) throws {
+        for hardLink in hardLinks.sorted(by: { $0.relativePath < $1.relativePath }) {
+            let targetURL = rootURL.appending(path: hardLink.targetRelativePath)
+            let outputURL = rootURL.appending(path: hardLink.relativePath)
+            guard fileManager.fileExists(atPath: targetURL.path) else {
+                throw StillCoreError.invalidStore(
+                    "The backup hard-link target is missing."
+                )
+            }
+            try fileManager.createDirectory(
+                at: outputURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try fileManager.linkItem(at: targetURL, to: outputURL)
+        }
+    }
+
+    private func extendedAttributes(at url: URL) throws -> [String: Data] {
+        try url.withUnsafeFileSystemRepresentation { path -> [String: Data] in
+            guard let path else { throw StillCoreError.invalidStore("A file path is invalid.") }
+            let length = listxattr(path, nil, 0, XATTR_NOFOLLOW)
+            guard length >= 0 else {
+                if errno == ENOTSUP { return [:] }
+                throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+            }
+            guard length > 0 else { return [:] }
+            var namesBuffer = [CChar](repeating: 0, count: length)
+            let readLength = listxattr(path, &namesBuffer, namesBuffer.count, XATTR_NOFOLLOW)
+            guard readLength == length else { throw POSIXError(.EIO) }
+            let names = namesBuffer.split(separator: 0).map {
+                String(decoding: $0.map(UInt8.init(bitPattern:)), as: UTF8.self)
+            }
+            var result: [String: Data] = [:]
+            for name in names.sorted() {
+                let value = try name.withCString { attributeName -> Data in
+                    let valueLength = getxattr(path, attributeName, nil, 0, 0, XATTR_NOFOLLOW)
+                    guard valueLength >= 0 else { throw POSIXError(.EIO) }
+                    guard valueLength > 0 else { return Data() }
+                    guard valueLength <= 32_768 else {
+                        throw StillCoreError.invalidStore(
+                            "An extended attribute is too large for a portable backup."
+                        )
+                    }
+                    var bytes = [UInt8](repeating: 0, count: valueLength)
+                    let actual = getxattr(
+                        path, attributeName, &bytes, bytes.count, 0, XATTR_NOFOLLOW
+                    )
+                    guard actual == valueLength else { throw POSIXError(.EIO) }
+                    return Data(bytes)
+                }
+                result[name] = value
+            }
+            try validateExtendedAttributes(result)
+            return result
+        }
+    }
+
+    private func restoreExtendedAttributes(
+        _ attributes: [String: Data],
+        at url: URL
+    ) throws {
+        try validateExtendedAttributes(attributes)
+        try url.withUnsafeFileSystemRepresentation { path in
+            guard let path else { throw StillCoreError.invalidStore("A file path is invalid.") }
+            for (name, value) in attributes.sorted(by: { $0.key < $1.key }) {
+                try name.withCString { attributeName in
+                    let result = value.withUnsafeBytes { bytes in
+                        setxattr(
+                            path,
+                            attributeName,
+                            bytes.baseAddress,
+                            bytes.count,
+                            0,
+                            XATTR_NOFOLLOW
+                        )
+                    }
+                    guard result == 0 else { throw POSIXError(.EIO) }
+                }
+            }
+        }
+    }
+
+    private func validateExtendedAttributes(_ attributes: [String: Data]) throws {
+        guard attributes.count <= 256,
+              attributes.allSatisfy({
+                  !$0.key.isEmpty
+                      && $0.key.utf8.count <= 1_024
+                      && !$0.key.contains("\0")
+                      && $0.value.count <= 32_768
+              }) else {
+            throw StillCoreError.invalidStore(
+                "The backup contains invalid extended attributes."
+            )
+        }
+        guard attributes.reduce(0, { $0 + $1.key.utf8.count + $1.value.count })
+            <= 48_000 else {
+            throw StillCoreError.invalidStore(
+                "The backup contains too much extended-attribute data for one item."
             )
         }
     }

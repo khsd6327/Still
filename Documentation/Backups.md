@@ -10,18 +10,19 @@ the included file count and byte count before writing the backup.
 
 ## Container format
 
-Format version 2 writes file data in bounded frames instead of loading an
-entire Environment into memory. Each file record includes its relative path,
-byte count, permissions, and SHA-256 digest. Still verifies those values while
-writing and restoring the file.
+Format version 4 writes file data in bounded frames instead of loading an
+entire Environment into memory. Regular files record their relative paths,
+byte counts, permissions, extended attributes, and SHA-256 digests. Dedicated
+records preserve symbolic links, hard links, hidden directories, and empty
+directories. Still verifies file data while writing and restoring it.
 
 Password-protected backups use versioned PBKDF2-HMAC-SHA256 parameters and a
 random salt. Each frame is protected independently with AES-GCM and a unique
 nonce. Header data and frame order participate in authentication. Backup
 creation fails if the system random source does not complete successfully.
 
-Still can inspect and restore format version 1 backups. New backups are always
-written in format version 2.
+Still can inspect and restore format versions 1 through 3. New backups are
+written in format version 4.
 
 ## Restore behavior
 
