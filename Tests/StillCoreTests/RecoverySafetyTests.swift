@@ -393,6 +393,35 @@ final class RecoverySafetyTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: recent.path))
     }
 
+    func testVerifiedCopyPreservesWineDriveSymlinksWithoutResolvingOutsidePrefix() throws {
+        let source = temporaryRoot("WineSymlinkSource")
+        let destination = temporaryRoot("WineSymlinkDestination")
+        defer {
+            try? FileManager.default.removeItem(at: source)
+            try? FileManager.default.removeItem(at: destination)
+        }
+        try write("registry", to: source.appending(path: "system.reg"))
+        let dosdevices = source.appending(path: "dosdevices", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(
+            at: dosdevices,
+            withIntermediateDirectories: true
+        )
+        try FileManager.default.createSymbolicLink(
+            at: dosdevices.appending(path: "z:"),
+            withDestinationURL: URL(filePath: "/")
+        )
+
+        _ = try FileTreeServices.verifiedCopy(from: source, to: destination)
+
+        let copiedLink = destination.appending(path: "dosdevices/z:")
+        let values = try copiedLink.resourceValues(forKeys: [.isSymbolicLinkKey])
+        XCTAssertEqual(values.isSymbolicLink, true)
+        XCTAssertEqual(
+            try FileManager.default.destinationOfSymbolicLink(atPath: copiedLink.path),
+            "/"
+        )
+    }
+
     private func temporaryRoot(_ name: String) -> URL {
         FileManager.default.temporaryDirectory
             .appending(path: "Still\(name)Tests")

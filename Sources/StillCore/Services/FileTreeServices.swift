@@ -19,14 +19,18 @@ enum FileTreeServices {
         ) else { return [] }
         var result: [FileTreeEntry] = []
         for case let url as URL in enumerator {
+            let values = try url.resourceValues(
+                forKeys: [.isRegularFileKey, .fileSizeKey, .isSymbolicLinkKey]
+            )
+            if values.isSymbolicLink == true {
+                enumerator.skipDescendants()
+                continue
+            }
             let relative = try relativePath(of: url, under: rootURL)
             if excluding(relative) {
                 enumerator.skipDescendants()
                 continue
             }
-            let values = try url.resourceValues(
-                forKeys: [.isRegularFileKey, .fileSizeKey, .isSymbolicLinkKey]
-            )
             guard values.isRegularFile == true, values.isSymbolicLink != true else { continue }
             let data = try Data(contentsOf: url)
             result.append(FileTreeEntry(
