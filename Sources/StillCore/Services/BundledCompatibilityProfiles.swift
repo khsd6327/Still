@@ -2,6 +2,9 @@ import Foundation
 
 public enum BundledCompatibilityProfiles {
     public static let verifiedDXMTRevision = "3525d41c71604ed07d796de5b58560e3cf6db944"
+    public static let verifiedEngineID = "still-wine-staging-11.14-dxmt-stable-3525d41"
+    public static let verifiedEngineArtifactManifestSHA256 =
+        "eb82efc6e1b876d63352c835f39f8f47366dc62c818f6544b5f5c21884c83f88"
 
     public static let steam = CompatibilityProfile(
         id: "valve-steam-preview",
@@ -14,7 +17,9 @@ public enum BundledCompatibilityProfiles {
             )
         ],
         requiredEngineFamily: .wineStaging,
+        requiredEngineID: verifiedEngineID,
         requiredDXMTRevision: verifiedDXMTRevision,
+        requiredArtifactManifestSHA256: verifiedEngineArtifactManifestSHA256,
         requiredCapabilities: [.win64, .dxmt, .dxmtBridge],
         recommendedSettings: CompatibilitySettings(
             windowsVersion: .windows10,
@@ -35,13 +40,16 @@ public enum BundledCompatibilityProfiles {
             )
         ],
         requiredEngineFamily: .wineStaging,
+        requiredEngineID: verifiedEngineID,
         requiredDXMTRevision: verifiedDXMTRevision,
+        requiredArtifactManifestSHA256: verifiedEngineArtifactManifestSHA256,
         requiredCapabilities: [.win64, .dxmt, .dxmtBridge],
         recommendedSettings: CompatibilitySettings(
             windowsVersion: .windows10,
             graphicsBackend: .dxmt,
             enhancedSync: .automatic
-        )
+        ),
+        validationEvidence: ["A rendered first-person scene and a movement frame were observed."]
     )
 
     public static let supermarketChaos = CompatibilityProfile(
@@ -55,13 +63,16 @@ public enum BundledCompatibilityProfiles {
             )
         ],
         requiredEngineFamily: .wineStaging,
+        requiredEngineID: verifiedEngineID,
         requiredDXMTRevision: verifiedDXMTRevision,
+        requiredArtifactManifestSHA256: verifiedEngineArtifactManifestSHA256,
         requiredCapabilities: [.win64, .dxmt, .dxmtBridge],
         recommendedSettings: CompatibilitySettings(
             windowsVersion: .windows10,
             graphicsBackend: .dxmt,
             enhancedSync: .automatic
-        )
+        ),
+        validationEvidence: ["A rendered 3D menu scene and a gameplay frame were observed."]
     )
 
     public static let all = [steam, cashCleanerSimulator, supermarketChaos]

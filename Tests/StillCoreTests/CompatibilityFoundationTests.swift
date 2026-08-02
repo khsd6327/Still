@@ -366,6 +366,139 @@ final class CompatibilityFoundationTests: XCTestCase {
         ))
     }
 
+    func testVerifiedProfileRequiresExactEngineArtifactIdentity() throws {
+        let profile = BundledCompatibilityProfiles.steam
+        let environment = WindowsEnvironment(
+            name: "Steam",
+            prefixURL: URL(filePath: "/tmp/StillExactEngine"),
+            graphicsBackend: .dxmt
+        )
+        let registry = makeRegistry(
+            engineCapabilities: [.win64],
+            componentCapabilities: [.dxmt, .dxmtBridge]
+        )
+        let resolver = CompatibilityResolver()
+
+        XCTAssertThrowsError(try resolver.resolve(
+            environment: environment,
+            profile: profile,
+            engineID: "same-revision-different-build",
+            engineFamily: .wineStaging,
+            engineDXMTRevision: BundledCompatibilityProfiles.verifiedDXMTRevision,
+            engineArtifactManifestSHA256:
+                BundledCompatibilityProfiles.verifiedEngineArtifactManifestSHA256,
+            registry: registry
+        ))
+        XCTAssertThrowsError(try resolver.resolve(
+            environment: environment,
+            profile: profile,
+            engineID: BundledCompatibilityProfiles.verifiedEngineID,
+            engineFamily: .wineStaging,
+            engineDXMTRevision: BundledCompatibilityProfiles.verifiedDXMTRevision,
+            engineArtifactManifestSHA256: String(repeating: "0", count: 64),
+            registry: registry
+        ))
+        XCTAssertNoThrow(try resolver.resolve(
+            environment: environment,
+            profile: profile,
+            engineID: BundledCompatibilityProfiles.verifiedEngineID,
+            engineFamily: .wineStaging,
+            engineDXMTRevision: BundledCompatibilityProfiles.verifiedDXMTRevision,
+            engineArtifactManifestSHA256:
+                BundledCompatibilityProfiles.verifiedEngineArtifactManifestSHA256,
+            registry: registry
+        ))
+    }
+
+    func testResolvedSteamLaunchProducesOneExactProcessPlanEvidenceSnapshot() throws {
+        let environmentID = UUID()
+        let application = LibraryApplication(
+            environmentID: environmentID,
+            name: "Steam",
+            providerID: "steam",
+            providerItemID: "client"
+        )
+        let entry = LaunchEntry(
+            applicationID: application.id,
+            executableURL: URL(filePath: "/tmp/Steam/steam.exe")
+        )
+        let environment = WindowsEnvironment(
+            id: environmentID,
+            name: "Steam",
+            prefixURL: URL(filePath: "/tmp/Steam"),
+            pinnedEngineBuildID: BundledCompatibilityProfiles.verifiedEngineID,
+            graphicsBackend: .wineD3D
+        )
+        let engine = EngineDescriptor(
+            id: BundledCompatibilityProfiles.verifiedEngineID,
+            displayName: "Verified",
+            version: "11.14-stable1",
+            wineVersion: "11.14",
+            dxmtRevision: BundledCompatibilityProfiles.verifiedDXMTRevision,
+            family: .wineStaging,
+            wineBinaryURL: URL(filePath: "/tmp/engine/bin/wine"),
+            capabilities: [.win64, .dxmt],
+            artifactManifestSHA256:
+                BundledCompatibilityProfiles.verifiedEngineArtifactManifestSHA256
+        )
+        let build = EngineBuild(
+            id: engine.id,
+            family: .wineStaging,
+            displayName: engine.displayName,
+            version: engine.version,
+            wineVersion: engine.wineVersion,
+            dxmtRevision: engine.dxmtRevision,
+            installURL: URL(filePath: "/tmp/engine"),
+            capabilities: engine.capabilities,
+            artifactManifestSHA256: engine.artifactManifestSHA256
+        )
+        let registry = CapabilityRegistry(
+            host: HostCapabilitySnapshot(
+                architecture: .arm64,
+                supportsMetal: true,
+                supportsRosetta: true
+            ),
+            engine: build,
+            components: [],
+            bridgeAvailability: .available()
+        )
+
+        let resolved = try CompatibilityResolver().resolveLaunch(
+            application: application,
+            launchEntry: entry,
+            environment: environment,
+            profile: BundledCompatibilityProfiles.steam,
+            engine: engine,
+            engineBuild: build,
+            registry: registry
+        )
+        let plan = WineCommandBuilder.launchPlan(
+            engine: engine,
+            request: LaunchRequest(
+                bottle: resolved.bottle,
+                executableURL: entry.executableURL,
+                arguments: resolved.arguments,
+                environment: resolved.environment,
+                applicationID: application.id,
+                environmentID: environment.id,
+                runtimeEvidence: resolved.runtimeEvidence
+            ),
+            logURL: URL(filePath: "/tmp/steam.log")
+        )
+
+        XCTAssertEqual(plan.runtimeEvidence, resolved.runtimeEvidence)
+        XCTAssertEqual(plan.runtimeEvidence?.profileID, BundledCompatibilityProfiles.steam.id)
+        XCTAssertEqual(plan.runtimeEvidence?.runtimePolicyID, "steam-client")
+        XCTAssertEqual(plan.runtimeEvidence?.graphicsBackend, .dxmt)
+        XCTAssertEqual(
+            plan.runtimeEvidence?.engineArtifactManifestSHA256,
+            BundledCompatibilityProfiles.verifiedEngineArtifactManifestSHA256
+        )
+        XCTAssertEqual(plan.environment["STILL_STEAM_CEF_RAW_ANGLE"], "1")
+        XCTAssertFalse(plan.arguments.contains("-cef-disable-gpu"))
+        XCTAssertFalse(plan.arguments.contains("-cef-disable-gpu-compositing"))
+    }
+
     func testEnginePinChangeRequiresStopApprovalAndRestorePoint() async throws {
         let rootURL = FileManager.default.temporaryDirectory
             .appending(path: "StillEnginePinTests")

@@ -11,7 +11,6 @@ private enum StabilizationGate {
 @MainActor
 final class AppModel: ObservableObject {
     private let store = JSONStillStore()
-    private let legacyBottleStore = JSONBottleStore()
     private let engineInstaller = EngineInstaller()
     private let discoveryCoordinator = ApplicationDiscoveryCoordinator()
     private let supervisor = ProcessSupervisor()
@@ -100,6 +99,7 @@ final class AppModel: ObservableObject {
     @Published var pendingDiscoveryCandidates: [PendingDiscoveryCandidate] = []
     @Published var supportBundleDraft: SupportBundleDraft?
     @Published var supportBundleExportedURL: URL?
+    private var acceptedEngineLicenseIDs: Set<String> = []
 
     init() {
         let defaults = UserDefaults.standard
@@ -221,6 +221,7 @@ final class AppModel: ObservableObject {
             launchEntries = document.launchEntries
             operations = document.operations.sorted { $0.createdAt > $1.createdAt }
             installedEngines = await engineInstaller.installedDescriptors()
+            acceptedEngineLicenseIDs = await engineInstaller.acceptedLicenseIDs()
             let installedBuilds = try installedEngines.map(runtimeBuild)
             try await store.synchronizeInstalledEngineBuilds(installedBuilds)
             document = try await store.load()
@@ -494,51 +495,27 @@ final class AppModel: ObservableObject {
                         ? dxmtBridgeValidator.validate(engine: engine)
                         : nil
                 )
-                let baseline = try compatibilityResolver.resolve(
+                let resolved = try compatibilityResolver.resolveLaunch(
+                    application: application,
+                    launchEntry: entry,
                     environment: environment,
                     profile: profile,
-                    engineFamily: engineBuild.family,
-                    engineDXMTRevision: engineBuild.dxmtRevision,
+                    engine: engine,
+                    engineBuild: engineBuild,
                     registry: registry
-                )
-                var baselineEnvironment = environment
-                baselineEnvironment.windowsVersion = baseline.windowsVersion.value
-                baselineEnvironment.graphicsBackend = baseline.graphicsBackend.value
-                baselineEnvironment.enhancedSync = baseline.enhancedSync.value
-                let runtimePolicy = SteamBootstrapper.compatibilitySettings(
-                    for: bottle(from: baselineEnvironment),
-                    executableURL: entry.executableURL
-                )
-                let effective = try compatibilityResolver.resolve(
-                    environment: environment,
-                    profile: profile,
-                    runtimePolicySettings: runtimePolicy,
-                    runtimePolicyID: "steam-client",
-                    engineFamily: engineBuild.family,
-                    engineDXMTRevision: engineBuild.dxmtRevision,
-                    registry: registry
-                )
-                var effectiveEnvironment = environment
-                effectiveEnvironment.windowsVersion = effective.windowsVersion.value
-                effectiveEnvironment.graphicsBackend = effective.graphicsBackend.value
-                effectiveEnvironment.enhancedSync = effective.enhancedSync.value
-                let effectiveBottle = bottle(from: effectiveEnvironment)
-                let launchEnvironment = effective.environmentVariables.mapValues(\.value)
-                let resolvedArguments = LaunchArgumentMerger.merge(
-                    entry.arguments,
-                    effective.launchArguments
                 )
                 let session = try await LocalWineEngine(
                     descriptor: engine,
                     processSupervisor: supervisor
                 ).launch(LaunchRequest(
-                    bottle: effectiveBottle,
+                    bottle: resolved.bottle,
                     executableURL: entry.executableURL,
-                    arguments: resolvedArguments,
-                    environment: launchEnvironment,
+                    arguments: resolved.arguments,
+                    environment: resolved.environment,
                     workingDirectoryURL: entry.workingDirectoryURL,
                     applicationID: application.id,
-                    environmentID: environment.id
+                    environmentID: environment.id,
+                    runtimeEvidence: resolved.runtimeEvidence
                 ))
                 sessions.append(session)
                 application.lastLaunchedAt = .now
@@ -1035,6 +1012,9 @@ final class AppModel: ObservableObject {
             installURL: engine.wineBinaryURL.deletingLastPathComponent(),
             capabilities: engine.capabilities,
             manifestID: bundledManifest?.id,
+            requiredLicenseID: bundledManifest?.distributionPolicy == .externalLicenseRequired
+                ? bundledManifest?.id
+                : nil,
             sourceArchiveSHA256: engine.sourceArchiveSHA256,
             artifactManifestSHA256: engine.artifactManifestSHA256
         )
@@ -1053,7 +1033,8 @@ final class AppModel: ObservableObject {
         return HostCapabilitySnapshot(
             architecture: architecture,
             supportsMetal: MTLCreateSystemDefaultDevice() != nil,
-            supportsRosetta: supportsRosetta
+            supportsRosetta: supportsRosetta,
+            acceptedLicenseIDs: acceptedEngineLicenseIDs
         )
     }
 

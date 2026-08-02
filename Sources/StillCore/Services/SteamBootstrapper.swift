@@ -69,6 +69,32 @@ public actor SteamBootstrapper {
         )
     }
 
+    public static func compatibilitySettings(
+        for application: LibraryApplication,
+        graphicsBackend: GraphicsBackend,
+        executableURL: URL
+    ) -> (id: String?, settings: CompatibilitySettings) {
+        guard application.providerID?.caseInsensitiveCompare("steam") == .orderedSame,
+              isSteamClientExecutable(executableURL) else {
+            return (nil, CompatibilitySettings())
+        }
+        let isClient = application.providerItemID == "client"
+        let policyID = isClient ? "steam-client" : "steam-game-broker"
+        if graphicsBackend == .dxmt {
+            return (
+                policyID,
+                CompatibilitySettings(environmentVariables: [
+                    "STILL_STEAM_CEF_RAW_ANGLE": "1",
+                    "WINEMAC_REMOTE_METAL_MODE": "stable"
+                ])
+            )
+        }
+        return (
+            policyID,
+            CompatibilitySettings(launchArguments: softwareRenderingLaunchArguments)
+        )
+    }
+
     public static func isSteamClientExecutable(_ executableURL: URL) -> Bool {
         executableURL.lastPathComponent.caseInsensitiveCompare("steam.exe")
             == .orderedSame

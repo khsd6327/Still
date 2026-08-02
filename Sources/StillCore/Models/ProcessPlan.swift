@@ -8,6 +8,7 @@ public struct ProcessTerminationPlan: Sendable {
     public let forceExecutableURL: URL
     public let forceArguments: [String]
     public let monitorExecutableURL: URL?
+    public let monitorPrepareArguments: [String]
     public let monitorArguments: [String]
     public let environment: [String: String]
     public let workingDirectoryURL: URL?
@@ -21,6 +22,7 @@ public struct ProcessTerminationPlan: Sendable {
         forceExecutableURL: URL,
         forceArguments: [String],
         monitorExecutableURL: URL? = nil,
+        monitorPrepareArguments: [String] = [],
         monitorArguments: [String] = [],
         environment: [String: String],
         workingDirectoryURL: URL? = nil,
@@ -33,6 +35,7 @@ public struct ProcessTerminationPlan: Sendable {
         self.forceExecutableURL = forceExecutableURL
         self.forceArguments = forceArguments
         self.monitorExecutableURL = monitorExecutableURL
+        self.monitorPrepareArguments = monitorPrepareArguments
         self.monitorArguments = monitorArguments
         self.environment = environment
         self.workingDirectoryURL = workingDirectoryURL
@@ -50,6 +53,7 @@ public struct ProcessPlan: Sendable {
     public let workingDirectoryURL: URL?
     public let logURL: URL
     public let terminationPlan: ProcessTerminationPlan?
+    public let runtimeEvidence: RuntimeLaunchEvidence?
 
     public init(
         sessionID: UUID = UUID(),
@@ -60,7 +64,8 @@ public struct ProcessPlan: Sendable {
         environment: [String: String] = [:],
         workingDirectoryURL: URL? = nil,
         logURL: URL,
-        terminationPlan: ProcessTerminationPlan? = nil
+        terminationPlan: ProcessTerminationPlan? = nil,
+        runtimeEvidence: RuntimeLaunchEvidence? = nil
     ) {
         self.sessionID = sessionID
         self.applicationID = applicationID
@@ -71,5 +76,6 @@ public struct ProcessPlan: Sendable {
         self.workingDirectoryURL = workingDirectoryURL
         self.logURL = logURL
         self.terminationPlan = terminationPlan
+        self.runtimeEvidence = runtimeEvidence
     }
 }

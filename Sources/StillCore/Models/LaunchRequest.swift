@@ -8,6 +8,7 @@ public struct LaunchRequest: Hashable, Sendable {
     public var workingDirectoryURL: URL?
     public var applicationID: LibraryApplication.ID?
     public var environmentID: WindowsEnvironment.ID?
+    public var runtimeEvidence: RuntimeLaunchEvidence?
 
     public init(
         bottle: Bottle,
@@ -16,7 +17,8 @@ public struct LaunchRequest: Hashable, Sendable {
         environment: [String: String] = [:],
         workingDirectoryURL: URL? = nil,
         applicationID: LibraryApplication.ID? = nil,
-        environmentID: WindowsEnvironment.ID? = nil
+        environmentID: WindowsEnvironment.ID? = nil,
+        runtimeEvidence: RuntimeLaunchEvidence? = nil
     ) {
         self.bottle = bottle
         self.executableURL = executableURL
@@ -25,5 +27,6 @@ public struct LaunchRequest: Hashable, Sendable {
         self.workingDirectoryURL = workingDirectoryURL
         self.applicationID = applicationID
         self.environmentID = environmentID
+        self.runtimeEvidence = runtimeEvidence
     }
 }

@@ -10,6 +10,11 @@ final class ApplicationRecipeTests: XCTestCase {
         XCTAssertEqual(recipe.windowsVersion, .windows10)
         XCTAssertEqual(recipe.graphicsBackend, .wineD3D)
         XCTAssertEqual(profile.requiredEngineFamily, .wineStaging)
+        XCTAssertEqual(profile.requiredEngineID, BundledCompatibilityProfiles.verifiedEngineID)
+        XCTAssertEqual(
+            profile.requiredArtifactManifestSHA256,
+            BundledCompatibilityProfiles.verifiedEngineArtifactManifestSHA256
+        )
         XCTAssertTrue(profile.requiredCapabilities.contains(.dxmt))
         XCTAssertTrue(profile.requiredCapabilities.contains(.dxmtBridge))
         XCTAssertEqual(profile.recommendedSettings.graphicsBackend, .dxmt)
