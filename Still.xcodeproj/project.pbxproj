@@ -55,8 +55,8 @@
 		5DEC1A787F876D7DBB999EB5 /* ApplicationLibraryScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCD8061811699BD8330516B5 /* ApplicationLibraryScanner.swift */; };
 		5E612AFA431EB6ED21BEB883 /* CapabilityRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F226E7B0AA09DD7D6A88A82 /* CapabilityRegistry.swift */; };
 		616B5B4F6DF428E9EABAED3B /* JSONBottleStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B80270DE89381BF90EC70E1D /* JSONBottleStoreTests.swift */; };
+		6256D1FDA39D8B2F7538E2B7 /* HostProcessTerminator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 411F6B0141CF69445EE17701 /* HostProcessTerminator.swift */; };
 		647BBEDC388F3CB07E937EEF /* ProcessSupervisor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59367E2D537F173E9466514F /* ProcessSupervisor.swift */; };
-		A1B2C3D4E5F60718293A4B5D /* HostProcessTerminator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B5C /* HostProcessTerminator.swift */; };
 		67EDA103792A74378B58740D /* EngineInstaller.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6038FF4C1E066D257E255DF /* EngineInstaller.swift */; };
 		6DBF20783C96DDAA77EB71AC /* ValveKeyValueParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E655A331D6FF2F02D28DFF1 /* ValveKeyValueParserTests.swift */; };
 		6ECCD45212A69BEF5430CE11 /* JSONApplicationPinStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA309E592274888F85711621 /* JSONApplicationPinStoreTests.swift */; };
@@ -75,6 +75,7 @@
 		9B858DB6BACAFC6BB59A98E1 /* EnvironmentRecoveryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04C599C356ED1A317486DC30 /* EnvironmentRecoveryService.swift */; };
 		9BAFF870A081C03A518781DE /* ApplicationLifecycle.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF8C2CBC05E8060273FD0B0B /* ApplicationLifecycle.swift */; };
 		A21BAD240D0113486038828E /* Operation.swift in Sources */ = {isa = PBXBuildFile; fileRef = F456F04AE6B84288B81D462A /* Operation.swift */; };
+		A21F2B8B36BAD12BA18F21C4 /* WineRuntimeProbeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B912613595E7B4E6B25A44D /* WineRuntimeProbeTests.swift */; };
 		A4D41498B0C684A7A8C0572F /* Bottle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A2C836863F55F6983DD09A8 /* Bottle.swift */; };
 		A655934AE3EAA33817333F97 /* ActivityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 066C4D80C4609D220FD7944F /* ActivityView.swift */; };
 		A7A6ADE396DCFDDAA80CC753 /* DeveloperView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C521089E24C42ABA890A595 /* DeveloperView.swift */; };
@@ -90,6 +91,7 @@
 		B7A9D624F0989DD584E218CA /* LogLocations.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA8702E1886D5E5B6A1FDA86 /* LogLocations.swift */; };
 		B84D99197B467211AC9C59B2 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0D082EB02B2E3825A3DFBE1 /* SettingsView.swift */; };
 		B92F944488218B31DE241B22 /* WindowsExecutableScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BC4F55CA9FA96602041A234 /* WindowsExecutableScanner.swift */; };
+		BA8ED8AB59F4442DAF97B526 /* WineRuntimeProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCC026D0FCC62E2A0567C2A9 /* WineRuntimeProbe.swift */; };
 		BAE749EC0FA5F270B64A6CC9 /* WineProcessTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCA9EA7D3D18E5DA39A979BC /* WineProcessTests.swift */; };
 		BBCD16D9555F34FB4841332A /* WineEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = F72E9E612C050188F4EC143E /* WineEngine.swift */; };
 		BCFE15B685D0964E3096016A /* SupportBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1874127CF8C78D801108DAC /* SupportBundle.swift */; };
@@ -98,6 +100,7 @@
 		C8A8B6C1F0F2462A065FE191 /* RuntimeInventory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7107D65D16C62BE9CAB8C3DA /* RuntimeInventory.swift */; };
 		CA18627069DAEBED2AA39921 /* WindowsExecutableScannerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F9A2BF5D71ED18D9D8AA5FE /* WindowsExecutableScannerTests.swift */; };
 		CE4FB2192F3F33C1F42A1CA4 /* EnvironmentRestoreCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88814099EB55762A46FC4797 /* EnvironmentRestoreCoordinatorTests.swift */; };
+		D1D9F665743F7D6B77EBE757 /* RuntimePerformance.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD6B25F2B2EC7257F8219889 /* RuntimePerformance.swift */; };
 		D382736D29DDFCDD4F4E6FFB /* LaunchSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54FB2219A9000B368BAC6BE6 /* LaunchSession.swift */; };
 		D3CDC81CF5B7283F57CCAACA /* LaunchRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31398F75CF52EAAF9FFAB6F6 /* LaunchRequest.swift */; };
 		D3F1AAB99610417E12AB2783 /* InstalledEngineBuildManifest.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D36ACCD3AC97642669D6E74 /* InstalledEngineBuildManifest.swift */; };
@@ -195,6 +198,7 @@
 		3176961D6ECA772977E60262 /* EnvironmentDeletionCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnvironmentDeletionCoordinator.swift; sourceTree = "<group>"; };
 		39C346E07F8EE6F57A6B926B /* LibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryView.swift; sourceTree = "<group>"; };
 		3F00D4A920651C79335F0BE5 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
+		411F6B0141CF69445EE17701 /* HostProcessTerminator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostProcessTerminator.swift; sourceTree = "<group>"; };
 		4162777B334F8A680A4A9067 /* ApplicationDiscoveryCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApplicationDiscoveryCoordinatorTests.swift; sourceTree = "<group>"; };
 		47DB75A30DE08EDE8CC26529 /* AppContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppContainer.swift; sourceTree = "<group>"; };
 		4909447EF1E68FA39D43DA8A /* RecoverySafetyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecoverySafetyTests.swift; sourceTree = "<group>"; };
@@ -203,7 +207,6 @@
 		568DE663644743DD8BE985D3 /* LogRotationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogRotationService.swift; sourceTree = "<group>"; };
 		57828174F87767B29893CB42 /* BundledEngineCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BundledEngineCatalog.swift; sourceTree = "<group>"; };
 		59367E2D537F173E9466514F /* ProcessSupervisor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessSupervisor.swift; sourceTree = "<group>"; };
-		A1B2C3D4E5F60718293A4B5C /* HostProcessTerminator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostProcessTerminator.swift; sourceTree = "<group>"; };
 		59413BA37A7EF7F22E7835F0 /* StillStoreMigrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StillStoreMigrationTests.swift; sourceTree = "<group>"; };
 		5A3C489653597F75D2E724CC /* CompatibilityProfileMatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompatibilityProfileMatcher.swift; sourceTree = "<group>"; };
 		5C8680B9AE12771AA5107433 /* RestorePointService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RestorePointService.swift; sourceTree = "<group>"; };
@@ -225,6 +228,7 @@
 		7596AFA2AA56E110A5BAFEA5 /* EnvironmentRestoreCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnvironmentRestoreCoordinator.swift; sourceTree = "<group>"; };
 		79660805A836A3AE804666D8 /* StillCommands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StillCommands.swift; sourceTree = "<group>"; };
 		7A4D039E843D38939E7A34C4 /* JSONStillStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JSONStillStore.swift; sourceTree = "<group>"; };
+		7B912613595E7B4E6B25A44D /* WineRuntimeProbeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WineRuntimeProbeTests.swift; sourceTree = "<group>"; };
 		7BA7610F1F246F629DDE079E /* CompatibilityFoundationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompatibilityFoundationTests.swift; sourceTree = "<group>"; };
 		7E655A331D6FF2F02D28DFF1 /* ValveKeyValueParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ValveKeyValueParserTests.swift; sourceTree = "<group>"; };
 		82E967664122B023E75781E1 /* StillDesktopApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StillDesktopApp.swift; sourceTree = "<group>"; };
@@ -259,6 +263,8 @@
 		B8186451672745A7EE64D345 /* WindowsApplicationRecipe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowsApplicationRecipe.swift; sourceTree = "<group>"; };
 		BB6D932AE9CFDC05DE9642FF /* InstallView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstallView.swift; sourceTree = "<group>"; };
 		BBD22D67E34E7F76C7D548E4 /* SidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarView.swift; sourceTree = "<group>"; };
+		BCC026D0FCC62E2A0567C2A9 /* WineRuntimeProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WineRuntimeProbe.swift; sourceTree = "<group>"; };
+		BD6B25F2B2EC7257F8219889 /* RuntimePerformance.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimePerformance.swift; sourceTree = "<group>"; };
 		C00E034B48823303EA71DC8D /* EnvironmentsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnvironmentsView.swift; sourceTree = "<group>"; };
 		C1B66EB6D90CECF701CAD7ED /* StillCoreTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = StillCoreTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		C7480CFE9ED2C36424381012 /* LibraryApplication.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryApplication.swift; sourceTree = "<group>"; };
@@ -334,6 +340,7 @@
 				FA41447ACB35E8B3F2DA6B4F /* ProductIdentity.swift */,
 				128FE02A9D4B57B811DE7E10 /* Recovery.swift */,
 				7107D65D16C62BE9CAB8C3DA /* RuntimeInventory.swift */,
+				BD6B25F2B2EC7257F8219889 /* RuntimePerformance.swift */,
 				A0490D61AF284E5C72C24F8D /* StableID.swift */,
 				A1874127CF8C78D801108DAC /* SupportBundle.swift */,
 				B8186451672745A7EE64D345 /* WindowsApplicationRecipe.swift */,
@@ -374,7 +381,7 @@
 				04C599C356ED1A317486DC30 /* EnvironmentRecoveryService.swift */,
 				7596AFA2AA56E110A5BAFEA5 /* EnvironmentRestoreCoordinator.swift */,
 				1B3E91F092131B1C5C303C4D /* FileTreeServices.swift */,
-				A1B2C3D4E5F60718293A4B5C /* HostProcessTerminator.swift */,
+				411F6B0141CF69445EE17701 /* HostProcessTerminator.swift */,
 				986DA5066A2FDFA5487D4BF3 /* JSONApplicationPinStore.swift */,
 				8C95F7221EE83F1953902225 /* JSONBottleStore.swift */,
 				7A4D039E843D38939E7A34C4 /* JSONStillStore.swift */,
@@ -400,6 +407,7 @@
 				2BC4F55CA9FA96602041A234 /* WindowsExecutableScanner.swift */,
 				6F42F62BE4405785E33DA848 /* WineCommandBuilder.swift */,
 				10EE7BC1502C29E3E2053E82 /* WineProcessController.swift */,
+				BCC026D0FCC62E2A0567C2A9 /* WineRuntimeProbe.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -428,6 +436,7 @@
 				0F9A2BF5D71ED18D9D8AA5FE /* WindowsExecutableScannerTests.swift */,
 				E25C40F47438C736FA1E4C30 /* WindowsProcessListParserTests.swift */,
 				CCA9EA7D3D18E5DA39A979BC /* WineProcessTests.swift */,
+				7B912613595E7B4E6B25A44D /* WineRuntimeProbeTests.swift */,
 			);
 			path = StillCoreTests;
 			sourceTree = "<group>";
@@ -652,6 +661,7 @@
 				CA18627069DAEBED2AA39921 /* WindowsExecutableScannerTests.swift in Sources */,
 				1343D9CA2E07E25888288AEB /* WindowsProcessListParserTests.swift in Sources */,
 				BAE749EC0FA5F270B64A6CC9 /* WineProcessTests.swift in Sources */,
+				A21F2B8B36BAD12BA18F21C4 /* WineRuntimeProbeTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -689,8 +699,8 @@
 				9B858DB6BACAFC6BB59A98E1 /* EnvironmentRecoveryService.swift in Sources */,
 				FA3CC46A3123038886EDB77C /* EnvironmentRestoreCoordinator.swift in Sources */,
 				87042FC9102CD3EE92356E8E /* FileTreeServices.swift in Sources */,
-				A1B2C3D4E5F60718293A4B5D /* HostProcessTerminator.swift in Sources */,
 				E196D53E2663386600FCE9BE /* GraphicsBackend.swift in Sources */,
+				6256D1FDA39D8B2F7538E2B7 /* HostProcessTerminator.swift in Sources */,
 				D3F1AAB99610417E12AB2783 /* InstalledEngineBuildManifest.swift in Sources */,
 				1F841839337C696A4F5E553F /* InstalledWindowsApplication.swift in Sources */,
 				F1949554C67A1E1B2F7F543D /* JSONApplicationPinStore.swift in Sources */,
@@ -711,6 +721,7 @@
 				0EAA10F75C7B73D78F1FEADE /* RepairService.swift in Sources */,
 				E0C5D518CA4D6074EC64CF70 /* RestorePointService.swift in Sources */,
 				C8A8B6C1F0F2462A065FE191 /* RuntimeInventory.swift in Sources */,
+				D1D9F665743F7D6B77EBE757 /* RuntimePerformance.swift in Sources */,
 				B5274A23652E8D02A0F92F94 /* SHA256Verifier.swift in Sources */,
 				4C56298D927516885FBF5A08 /* StableID.swift in Sources */,
 				02839A39F990E35CBAA362ED /* SteamBootstrapper.swift in Sources */,
@@ -731,6 +742,7 @@
 				70B768295BBA5C1F51DA918C /* WineCommandBuilder.swift in Sources */,
 				BBCD16D9555F34FB4841332A /* WineEngine.swift in Sources */,
 				E1E0173AD8DC4D8383E2F562 /* WineProcessController.swift in Sources */,
+				BA8ED8AB59F4442DAF97B526 /* WineRuntimeProbe.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

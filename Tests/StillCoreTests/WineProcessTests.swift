@@ -166,6 +166,7 @@ final class WineProcessTests: XCTestCase {
         XCTAssertEqual(plan.environment["WINEESYNC"], "1")
         XCTAssertEqual(plan.environment["MTL_HUD_ENABLED"], "1")
         XCTAssertEqual(plan.environment["METAL_CAPTURE_ENABLED"], "1")
+        XCTAssertEqual(plan.environment["MVK_CONFIG_LOG_LEVEL"], "0")
     }
 
     func testDXMTEnvironmentDoesNotInjectDiagnosticShimByDefault() throws {

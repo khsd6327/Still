@@ -356,6 +356,55 @@ final class OperationLaunchSessionTests: XCTestCase {
         XCTAssertTrue(activeSessions.isEmpty)
     }
 
+    func testAdoptedWineSessionIsActiveAndRejectsDuplicateApplication() async throws {
+        let rootURL = temporaryRoot("AdoptedSession")
+        defer { try? FileManager.default.removeItem(at: rootURL) }
+        try FileManager.default.createDirectory(at: rootURL, withIntermediateDirectories: true)
+        let applicationID = UUID()
+        let termination = ProcessTerminationPlan(
+            scopeIdentifier: rootURL.path,
+            gracefulExecutableURL: URL(filePath: "/usr/bin/true"),
+            gracefulArguments: [],
+            forceExecutableURL: URL(filePath: "/usr/bin/true"),
+            forceArguments: [],
+            monitorExecutableURL: URL(filePath: "/bin/sleep"),
+            monitorArguments: ["2"],
+            environment: [:],
+            workingDirectoryURL: rootURL,
+            acceptedExitCodes: [0]
+        )
+        let plan = ProcessPlan(
+            applicationID: applicationID,
+            environmentID: UUID(),
+            executableURL: URL(filePath: "/usr/bin/true"),
+            arguments: [],
+            logURL: rootURL.appending(path: "adopted.log"),
+            terminationPlan: termination
+        )
+        let supervisor = ProcessSupervisor()
+
+        let session = try await supervisor.adopt(
+            plan,
+            observedProcessIdentifier: 321,
+            observedProcessName: "game.exe"
+        )
+
+        XCTAssertEqual(session.state, .running)
+        XCTAssertEqual(session.processIdentifier, 321)
+        XCTAssertEqual(session.attributedProcesses.first?.name, "game.exe")
+        do {
+            _ = try await supervisor.adopt(
+                plan,
+                observedProcessIdentifier: 322,
+                observedProcessName: "game.exe"
+            )
+            XCTFail("Expected duplicate adopted session rejection")
+        } catch let error as StillCoreError {
+            XCTAssertEqual(error, .duplicateLaunch(applicationID))
+        }
+        try await supervisor.forceStop(sessionID: session.id)
+    }
+
     private func temporaryRoot(_ name: String) -> URL {
         FileManager.default.temporaryDirectory
             .appending(path: "Still\(name)Tests")

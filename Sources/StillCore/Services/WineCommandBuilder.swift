@@ -51,8 +51,15 @@ public enum WineCommandBuilder {
         )
     }
 
-    static func windowsDirectoryPrefix(_ directoryURL: URL, bottle: Bottle) -> String? {
-        let driveCURL = bottle.prefixURL
+    public static func windowsDirectoryPrefix(_ directoryURL: URL, bottle: Bottle) -> String? {
+        windowsDirectoryPrefix(directoryURL, prefixURL: bottle.prefixURL)
+    }
+
+    public static func windowsDirectoryPrefix(
+        _ directoryURL: URL,
+        prefixURL: URL
+    ) -> String? {
+        let driveCURL = prefixURL
             .appending(path: "drive_c", directoryHint: .isDirectory)
             .standardizedFileURL
         let directory = directoryURL.standardizedFileURL
@@ -146,6 +153,8 @@ public enum WineCommandBuilder {
         environment["WINEPREFIX"] = bottle.prefixURL.path
         environment["WINEDEBUG"] = inheritedEnvironment["WINEDEBUG"]
             ?? "fixme-all"
+        environment["MVK_CONFIG_LOG_LEVEL"] = inheritedEnvironment["MVK_CONFIG_LOG_LEVEL"]
+            ?? "0"
         switch bottle.enhancedSync {
         case .automatic:
             if engine.capabilities.contains(.msync) {

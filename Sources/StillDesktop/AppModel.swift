@@ -1,4 +1,5 @@
 import AppKit
+import Darwin
 import Foundation
 import Metal
 import StillCore
@@ -45,6 +46,9 @@ final class AppModel: ObservableObject {
     @Published var launchEntries: [LaunchEntry] = []
     @Published var operations: [StillOperation] = []
     @Published var sessions: [LaunchSession] = []
+    @Published var launchingApplicationIDs: Set<LibraryApplication.ID> = []
+    @Published var liveEnvironmentIDs: Set<WindowsEnvironment.ID> = []
+    @Published var performanceSnapshots: [LibraryApplication.ID: RuntimePerformanceSnapshot] = [:]
     @Published var installedEngines: [EngineDescriptor] = []
     @Published var selectedApplicationID: LibraryApplication.ID? {
         didSet { persist(selectedApplicationID, key: "selectedApplicationID") }
@@ -64,6 +68,7 @@ final class AppModel: ObservableObject {
     @Published var activityState: FeatureLoadState = .idle
     @Published var installDraft = InstallDraft()
     @Published var errorMessage: String?
+    @Published var launchNotice: String?
     @Published var pendingForceTermination: PendingForceTermination?
     @Published var developerModeEnabled: Bool {
         didSet { UserDefaults.standard.set(developerModeEnabled, forKey: "developerModeEnabled") }
@@ -146,6 +151,20 @@ final class AppModel: ObservableObject {
     var selectedSession: LaunchSession? {
         guard let applicationID = selectedApplicationID else { return nil }
         return sessions.first { $0.applicationID == applicationID && $0.state.isActive }
+    }
+
+    func runtimeState(for application: LibraryApplication) -> ApplicationRuntimeState {
+        if launchingApplicationIDs.contains(application.id) { return .launching }
+        if sessions.contains(where: {
+            $0.applicationID == application.id && $0.state.isActive
+        }) { return .running }
+        return .idle
+    }
+
+    func recentFailures(for application: LibraryApplication) -> [StillOperation] {
+        operations.filter {
+            $0.applicationID == application.id && $0.state == .failed
+        }.sorted { $0.createdAt > $1.createdAt }
     }
 
     func effectiveProfileID(for application: LibraryApplication) -> String? {
@@ -243,6 +262,7 @@ final class AppModel: ObservableObject {
             if !environments.contains(where: { $0.id == selectedEnvironmentID }) {
                 selectedEnvironmentID = environments.first?.id
             }
+            await reconcileLiveWineSessions()
             libraryState = discoveryFailureCount == 0
                 ? .success(applications.isEmpty ? nil : "Library updated.")
                 : .partial("Some Environments could not be scanned.")
@@ -463,17 +483,41 @@ final class AppModel: ObservableObject {
         pendingDiscoveryCandidates.removeAll { $0.id == pending.id }
     }
 
+    func performPrimaryApplicationAction() async {
+        guard let application = selectedApplication else { return }
+        switch runtimeState(for: application) {
+        case .idle:
+            await launchSelectedApplication()
+        case .launching:
+            return
+        case .running:
+            await openRunningApplication(application)
+        }
+    }
+
     func launchSelectedApplication() async {
         guard var application = selectedApplication,
               let environment = environments.first(where: { $0.id == application.environmentID }),
               let entryID = application.launchEntryIDs.first,
               let entry = launchEntries.first(where: { $0.id == entryID }) else { return }
+        guard runtimeState(for: application) == .idle else {
+            await performPrimaryApplicationAction()
+            return
+        }
+        launchingApplicationIDs.insert(application.id)
+        launchNotice = nil
+        let launchRequestedAt = Date()
+        var operation = StillOperation(
+            kind: .launchApplication,
+            environmentID: environment.id,
+            applicationID: application.id
+        )
+        defer { launchingApplicationIDs.remove(application.id) }
         do {
-            try await withEnvironmentLease(StillOperation(
-                kind: .launchApplication,
-                environmentID: environment.id,
-                applicationID: application.id
-            )) {
+            try await withEnvironmentLease(operation) {
+                try operation.transition(to: .running)
+                operation.appendEvent("Launch requested")
+                try await store.saveOperation(operation)
                 if let state = application.providerManagedState, state != .installed {
                     throw StillCoreError.invalidApplicationState(
                         "\(state.rawValue) (managed by \(application.providerID ?? "provider"))"
@@ -523,13 +567,33 @@ final class AppModel: ObservableObject {
                     application,
                     launchEntries: launchEntries.filter { $0.applicationID == application.id }
                 )
-                await load()
+                try operation.transition(
+                    to: .succeeded,
+                    resultSummary: "Launch request accepted"
+                )
+                try await store.saveOperation(operation)
+                await load(scanRegisteredEnvironments: false)
                 selectedApplicationID = application.id
                 activityState = .success("\(application.name) started.")
+                schedulePerformanceSampling(
+                    applicationID: application.id,
+                    operationID: operation.id,
+                    launchRequestedAt: launchRequestedAt
+                )
             }
         } catch {
-            activityState = .failure(error.localizedDescription)
-            errorMessage = error.localizedDescription
+            let message = launchFailureMessage(error, applicationName: application.name)
+            if operation.state == .pending {
+                try? operation.transition(to: .cancelled, resultSummary: message)
+            } else if operation.state == .running {
+                try? operation.transition(to: .failed, resultSummary: message)
+            }
+            operation.appendEvent(message)
+            try? await store.saveOperation(operation)
+            operations = (try? await store.operations()) ?? operations
+            activityState = .failure(message)
+            launchNotice = message
+            await reconcileLiveWineSessions()
         }
     }
 
@@ -549,7 +613,25 @@ final class AppModel: ObservableObject {
     func refreshActivity() async {
         operations = (try? await store.operations()) ?? []
         sessions = await supervisor.activeSessions()
+        await reconcileLiveWineSessions()
         activityState = .success(nil)
+    }
+
+    func setMetalHUDEnabled(_ enabled: Bool) async {
+        guard var environment = selectedEnvironment else { return }
+        environment.metalHUDEnabled = enabled
+        environment.updatedAt = .now
+        do {
+            try await store.saveEnvironment(environment)
+            await load(scanRegisteredEnvironments: false)
+            activityState = .success(
+                enabled
+                    ? "Metal performance HUD will appear on the next launch."
+                    : "Metal performance HUD disabled."
+            )
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 
     func stopSelectedNormally() async {
@@ -979,6 +1061,163 @@ final class AppModel: ObservableObject {
             await environmentOperationCoordinator.finish(operation)
             throw error
         }
+    }
+
+    private func reconcileLiveWineSessions() async {
+        do {
+            let processSnapshots = try await Task.detached {
+                try WineRuntimeProbe.runningProcesses()
+            }.value
+            for processIdentifier in WineRuntimeProbe.orphanedMonitorProcessIdentifiers(
+                in: processSnapshots,
+                environments: environments
+            ) {
+                Darwin.kill(processIdentifier, SIGTERM)
+            }
+            liveEnvironmentIDs = WineRuntimeProbe.liveEnvironmentIDs(
+                in: processSnapshots,
+                environments: environments
+            )
+            let observations = WineRuntimeProbe.observeApplications(
+                in: processSnapshots,
+                environments: environments,
+                applications: applications,
+                launchEntries: launchEntries
+            )
+            let activeApplicationIDs = Set(
+                (await supervisor.activeSessions()).compactMap(\.applicationID)
+            )
+            for observation in observations
+            where !activeApplicationIDs.contains(observation.applicationID) {
+                guard let application = applications.first(where: {
+                    $0.id == observation.applicationID
+                }),
+                let environment = environments.first(where: {
+                    $0.id == observation.environmentID
+                }),
+                let entryID = application.launchEntryIDs.first,
+                let entry = launchEntries.first(where: { $0.id == entryID }) else {
+                    continue
+                }
+                let engine = try engine(for: environment)
+                let sessionID = UUID()
+                let plan = WineCommandBuilder.launchPlan(
+                    sessionID: sessionID,
+                    engine: engine,
+                    request: LaunchRequest(
+                        bottle: bottle(from: environment),
+                        executableURL: entry.executableURL,
+                        arguments: entry.arguments,
+                        workingDirectoryURL: entry.workingDirectoryURL,
+                        applicationID: application.id,
+                        environmentID: environment.id
+                    ),
+                    logURL: LogLocations.launchLogURL(sessionID: sessionID)
+                )
+                _ = try await supervisor.adopt(
+                    plan,
+                    observedProcessIdentifier: observation.processIdentifier,
+                    observedProcessName: observation.processName
+                )
+            }
+            sessions = await supervisor.activeSessions()
+        } catch {
+            liveEnvironmentIDs = []
+        }
+    }
+
+    private func openRunningApplication(_ application: LibraryApplication) async {
+        do {
+            let processSnapshots = try await Task.detached {
+                try WineRuntimeProbe.runningProcesses()
+            }.value
+            guard let observation = WineRuntimeProbe.observeApplications(
+                in: processSnapshots,
+                environments: environments,
+                applications: applications,
+                launchEntries: launchEntries
+            ).first(where: { $0.applicationID == application.id }),
+            let runningApplication = NSRunningApplication(
+                processIdentifier: observation.processIdentifier
+            ) else {
+                launchNotice = "\(application.name) is running in the background."
+                return
+            }
+            runningApplication.activate(options: [.activateAllWindows])
+            activityState = .success("\(application.name) opened.")
+        } catch {
+            launchNotice = "\(application.name) is running, but its window could not be focused."
+        }
+    }
+
+    private func schedulePerformanceSampling(
+        applicationID: LibraryApplication.ID,
+        operationID: StillOperation.ID,
+        launchRequestedAt: Date
+    ) {
+        Task { [weak self] in
+            for delay in [2, 8, 20, 30] {
+                try? await Task.sleep(for: .seconds(delay))
+                guard let self else { return }
+                if await self.capturePerformance(
+                    applicationID: applicationID,
+                    operationID: operationID,
+                    launchRequestedAt: launchRequestedAt
+                ) { return }
+            }
+        }
+    }
+
+    private func capturePerformance(
+        applicationID: LibraryApplication.ID,
+        operationID: StillOperation.ID,
+        launchRequestedAt: Date
+    ) async -> Bool {
+        guard let application = applications.first(where: { $0.id == applicationID }),
+              let environment = environments.first(where: { $0.id == application.environmentID }),
+              let entryID = application.launchEntryIDs.first,
+              let entry = launchEntries.first(where: { $0.id == entryID }) else { return true }
+        do {
+            let processSnapshots = try await Task.detached {
+                try WineRuntimeProbe.runningProcesses()
+            }.value
+            let snapshot = WineRuntimeProbe.performanceSnapshot(
+                application: application,
+                environment: environment,
+                entry: entry,
+                processes: processSnapshots,
+                launchLatency: Date().timeIntervalSince(launchRequestedAt)
+            )
+            guard snapshot.processCount > 0 else { return false }
+            performanceSnapshots[application.id] = snapshot
+            if var operation = (try? await store.operations())?.first(where: {
+                $0.id == operationID
+            }) {
+                operation.appendEvent(
+                    String(
+                        format: "Observed after %.1f s · CPU %.1f%% · Memory %.0f MB",
+                        snapshot.launchLatency ?? 0,
+                        snapshot.cpuPercent,
+                        Double(snapshot.residentMemoryBytes) / 1_048_576
+                    )
+                )
+                try? await store.saveOperation(operation)
+                operations = (try? await store.operations()) ?? operations
+            }
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    private func launchFailureMessage(_ error: Error, applicationName: String) -> String {
+        if case StillCoreError.processFailed(2) = error {
+            return "\(applicationName) did not accept another launch. Refresh its status or stop the existing Wine session before retrying."
+        }
+        if case StillCoreError.duplicateLaunch = error {
+            return "\(applicationName) is already launching or running."
+        }
+        return error.localizedDescription
     }
 
     private func persist(_ id: UUID?, key: String) {

@@ -88,6 +88,64 @@ public actor ProcessSupervisor {
         }
     }
 
+    public func adopt(
+        _ plan: ProcessPlan,
+        observedProcessIdentifier: Int32,
+        observedProcessName: String
+    ) throws -> LaunchSession {
+        try validate(plan)
+        reapTerminatedProcesses()
+        if let applicationID = plan.applicationID,
+           processes.values.contains(where: {
+               $0.session.applicationID == applicationID && $0.session.state.isActive
+           }) {
+            throw StillCoreError.duplicateLaunch(applicationID)
+        }
+        guard let terminationPlan = plan.terminationPlan,
+              let monitorExecutableURL = terminationPlan.monitorExecutableURL else {
+            throw StillCoreError.invalidStore(
+                "An adopted Wine session requires a prefix monitor."
+            )
+        }
+
+        var managed = try makeManagedProcess(plan)
+        managed.process = makeProcess(
+            executableURL: monitorExecutableURL,
+            arguments: terminationPlan.monitorArguments,
+            environment: terminationPlan.environment,
+            workingDirectoryURL: terminationPlan.workingDirectoryURL,
+            logHandle: managed.logHandle
+        )
+        try managed.session.transition(to: .launching)
+        do {
+            try managed.process.run()
+            try managed.session.transition(
+                to: .running,
+                rootProcessIdentifier: observedProcessIdentifier
+            )
+            managed.session.replaceAttributedProcesses([
+                AttributedProcess(
+                    processIdentifier: observedProcessIdentifier,
+                    name: observedProcessName,
+                    applicationID: plan.applicationID,
+                    environmentID: plan.environmentID,
+                    launchSessionID: plan.sessionID,
+                    isRootProcess: true
+                )
+            ])
+            processes[managed.session.id] = managed
+            return managed.session
+        } catch {
+            try? managed.session.transition(
+                to: .failed,
+                failureDescription: error.localizedDescription
+            )
+            completedSessions[managed.session.id] = managed.session
+            try? managed.logHandle.close()
+            throw error
+        }
+    }
+
     @discardableResult
     public func runAndWait(_ plan: ProcessPlan) throws -> Int32 {
         try validate(plan)

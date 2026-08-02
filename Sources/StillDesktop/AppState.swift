@@ -80,6 +80,28 @@ enum LibraryPresentation: String, CaseIterable {
     case list
 }
 
+enum ApplicationRuntimeState: Equatable {
+    case idle
+    case launching
+    case running
+
+    var title: String {
+        switch self {
+        case .idle: "Run"
+        case .launching: "Launching…"
+        case .running: "Open"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .idle: "play.fill"
+        case .launching: "hourglass"
+        case .running: "macwindow"
+        }
+    }
+}
+
 enum FeatureLoadState: Equatable {
     case idle
     case loading
