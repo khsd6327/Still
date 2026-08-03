@@ -363,6 +363,7 @@ public actor JSONStillStore {
         var document = try load()
         document.applications.removeAll { $0.id == id }
         document.launchEntries.removeAll { $0.applicationID == id }
+        document.operations.removeAll { $0.applicationID == id }
         try save(document)
     }
 
@@ -391,6 +392,9 @@ public actor JSONStillStore {
         guard !staleIDs.isEmpty else { return [] }
         document.applications.removeAll { staleIDs.contains($0.id) }
         document.launchEntries.removeAll { staleIDs.contains($0.applicationID) }
+        document.operations.removeAll {
+            $0.applicationID.map(staleIDs.contains) == true
+        }
         try save(document)
         return staleIDs.sorted { $0.uuidString < $1.uuidString }
     }
@@ -600,12 +604,29 @@ public actor JSONStillStore {
     }
 
     @discardableResult
-    public func recoverInterruptedOperations(at date: Date = .now) throws -> [StillOperation] {
+    public func recoverInterruptedOperations(
+        at date: Date = .now,
+        activeApplicationIDs: Set<LibraryApplication.ID> = []
+    ) throws -> [StillOperation] {
         var document = try load()
         var recovered: [StillOperation] = []
         for index in document.operations.indices
         where !document.operations[index].state.isTerminal {
             var operation = document.operations[index]
+            if operation.kind == .launchApplication,
+               let applicationID = operation.applicationID,
+               activeApplicationIDs.contains(applicationID),
+               operation.state == .running {
+                try operation.transition(
+                    to: .succeeded,
+                    at: date,
+                    resultSummary: "Recovered running application after restart."
+                )
+                operation.appendEvent("Running application was observed during startup recovery.")
+                document.operations[index] = operation
+                recovered.append(operation)
+                continue
+            }
             if operation.state == .pending {
                 try operation.transition(to: .cancelled, at: date, resultSummary: "Interrupted before starting.")
             } else {

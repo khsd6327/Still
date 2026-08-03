@@ -2,14 +2,21 @@ import Darwin
 import Foundation
 
 public actor ProcessSupervisor {
-    private struct ManagedProcess {
-        var process: Process
-        let logHandle: FileHandle
+    private struct ManagedSession {
+        var process: Process?
+        var logHandle: FileHandle?
         let terminationPlan: ProcessTerminationPlan?
         var session: LaunchSession
     }
 
-    private var processes: [LaunchSession.ID: ManagedProcess] = [:]
+    private struct EnvironmentMonitor {
+        let process: Process
+        let logHandle: FileHandle
+        let plan: ProcessTerminationPlan
+    }
+
+    private var sessions: [LaunchSession.ID: ManagedSession] = [:]
+    private var monitors: [String: EnvironmentMonitor] = [:]
     private var completedSessions: [LaunchSession.ID: LaunchSession] = [:]
     private let fileManager: FileManager
 
@@ -19,109 +26,134 @@ public actor ProcessSupervisor {
 
     public func launch(_ plan: ProcessPlan) throws -> LaunchSession {
         try validate(plan)
-        reapTerminatedProcesses()
+        reapTerminatedState()
+        try rejectDuplicateApplication(plan.applicationID)
 
-        if let applicationID = plan.applicationID,
-           processes.values.contains(where: {
-               $0.session.applicationID == applicationID && $0.session.state.isActive
-           }) {
-            throw StillCoreError.duplicateLaunch(applicationID)
-        }
-
-        var managed = try makeManagedProcess(plan)
+        var managed = try makeManagedSession(plan)
         try managed.session.transition(to: .launching)
         do {
-            if let terminationPlan = managed.terminationPlan,
-               let monitorExecutableURL = terminationPlan.monitorExecutableURL,
-               !terminationPlan.monitorPrepareArguments.isEmpty {
+            guard let terminationPlan = plan.terminationPlan,
+                  terminationPlan.monitorExecutableURL != nil else {
+                guard let process = managed.process else {
+                    throw StillCoreError.invalidStore("The launch process was not prepared.")
+                }
+                try process.run()
+                try managed.session.transition(
+                    to: .running,
+                    rootProcessIdentifier: process.processIdentifier
+                )
+                managed.session.replaceAttributedProcesses([
+                    AttributedProcess(
+                        processIdentifier: process.processIdentifier,
+                        name: process.executableURL?.lastPathComponent ?? "Process",
+                        applicationID: plan.applicationID,
+                        environmentID: plan.environmentID,
+                        launchSessionID: plan.sessionID,
+                        isRootProcess: true
+                    )
+                ])
+                sessions[managed.session.id] = managed
+                return managed.session
+            }
+
+            guard let logHandle = managed.logHandle,
+                  let launchProcess = managed.process else {
+                throw StillCoreError.invalidStore("The Wine launch process was not prepared.")
+            }
+            if !terminationPlan.monitorPrepareArguments.isEmpty,
+               monitors[terminationPlan.scopeIdentifier] == nil,
+               let monitorExecutableURL = terminationPlan.monitorExecutableURL {
                 try runAndWait(
                     executableURL: monitorExecutableURL,
                     arguments: terminationPlan.monitorPrepareArguments,
                     environment: terminationPlan.environment,
                     workingDirectoryURL: terminationPlan.workingDirectoryURL,
-                    logHandle: managed.logHandle,
+                    logHandle: logHandle,
                     acceptedExitCodes: terminationPlan.acceptedExitCodes
                 )
             }
-            try managed.process.run()
-            if let terminationPlan = managed.terminationPlan,
-               let monitorExecutableURL = terminationPlan.monitorExecutableURL {
-                managed.process.waitUntilExit()
-                guard terminationPlan.acceptedExitCodes.contains(
-                    managed.process.terminationStatus
-                ) else {
-                    throw StillCoreError.processFailed(managed.process.terminationStatus)
-                }
-                managed.process = makeProcess(
-                    executableURL: monitorExecutableURL,
-                    arguments: terminationPlan.monitorArguments,
-                    environment: terminationPlan.environment,
-                    workingDirectoryURL: terminationPlan.workingDirectoryURL,
-                    logHandle: managed.logHandle
-                )
-                try managed.process.run()
+            try launchProcess.run()
+            launchProcess.waitUntilExit()
+            guard terminationPlan.acceptedExitCodes.contains(launchProcess.terminationStatus) else {
+                throw StillCoreError.processFailed(launchProcess.terminationStatus)
             }
-            try managed.session.transition(
-                to: .running,
-                rootProcessIdentifier: managed.process.processIdentifier
-            )
-            managed.session.replaceAttributedProcesses([
-                AttributedProcess(
-                    processIdentifier: managed.process.processIdentifier,
-                    name: managed.process.executableURL?.lastPathComponent ?? "Wine",
-                    applicationID: plan.applicationID,
-                    environmentID: plan.environmentID,
-                    launchSessionID: plan.sessionID,
-                    isRootProcess: true
-                )
-            ])
-            processes[managed.session.id] = managed
+            try? logHandle.close()
+            managed.process = nil
+            managed.logHandle = nil
+            try ensureEnvironmentMonitor(terminationPlan, logURL: plan.logURL)
+            sessions[managed.session.id] = managed
             return managed.session
         } catch {
-            try? managed.session.transition(
-                to: .failed,
-                failureDescription: error.localizedDescription
-            )
-            completedSessions[managed.session.id] = managed.session
-            try? managed.logHandle.close()
+            fail(&managed, error: error)
             throw error
         }
+    }
+
+    public func confirmRunning(
+        sessionID: LaunchSession.ID,
+        observation: LiveWineApplicationObservation
+    ) throws -> LaunchSession {
+        reapTerminatedState()
+        guard var managed = sessions[sessionID] else {
+            throw StillCoreError.sessionNotFound(sessionID)
+        }
+        guard managed.session.state == .launching,
+              managed.session.applicationID == observation.applicationID,
+              managed.session.environmentID == observation.environmentID else {
+            throw StillCoreError.invalidApplicationState(managed.session.state.rawValue)
+        }
+        try managed.session.transition(
+            to: .running,
+            rootProcessIdentifier: observation.processIdentifier,
+            rootProcessStartedAt: observation.processIdentity.startedAt
+        )
+        managed.session.replaceAttributedProcesses([
+            AttributedProcess(
+                processIdentifier: observation.processIdentifier,
+                name: observation.processName,
+                applicationID: observation.applicationID,
+                environmentID: observation.environmentID,
+                launchSessionID: sessionID,
+                isRootProcess: true,
+                processStartedAt: observation.processIdentity.startedAt
+            )
+        ])
+        sessions[sessionID] = managed
+        return managed.session
+    }
+
+    public func failLaunch(sessionID: LaunchSession.ID, reason: String) {
+        guard var managed = sessions.removeValue(forKey: sessionID) else { return }
+        if managed.session.state == .launching {
+            try? managed.session.transition(to: .failed, failureDescription: reason)
+        }
+        closeResources(&managed)
+        completedSessions[sessionID] = managed.session
     }
 
     public func adopt(
         _ plan: ProcessPlan,
         observedProcessIdentifier: Int32,
-        observedProcessName: String
+        observedProcessName: String,
+        observedProcessStartedAt: Date? = nil
     ) throws -> LaunchSession {
         try validate(plan)
-        reapTerminatedProcesses()
-        if let applicationID = plan.applicationID,
-           processes.values.contains(where: {
-               $0.session.applicationID == applicationID && $0.session.state.isActive
-           }) {
-            throw StillCoreError.duplicateLaunch(applicationID)
-        }
+        reapTerminatedState()
+        try rejectDuplicateApplication(plan.applicationID)
         guard let terminationPlan = plan.terminationPlan,
-              let monitorExecutableURL = terminationPlan.monitorExecutableURL else {
-            throw StillCoreError.invalidStore(
-                "An adopted Wine session requires a prefix monitor."
-            )
+              terminationPlan.monitorExecutableURL != nil else {
+            throw StillCoreError.invalidStore("An adopted Wine session requires a prefix monitor.")
         }
 
-        var managed = try makeManagedProcess(plan)
-        managed.process = makeProcess(
-            executableURL: monitorExecutableURL,
-            arguments: terminationPlan.monitorArguments,
-            environment: terminationPlan.environment,
-            workingDirectoryURL: terminationPlan.workingDirectoryURL,
-            logHandle: managed.logHandle
-        )
+        var managed = try makeManagedSession(plan)
         try managed.session.transition(to: .launching)
         do {
-            try managed.process.run()
+            closeResources(&managed)
+            try ensureEnvironmentMonitor(terminationPlan, logURL: plan.logURL)
             try managed.session.transition(
                 to: .running,
-                rootProcessIdentifier: observedProcessIdentifier
+                rootProcessIdentifier: observedProcessIdentifier,
+                rootProcessStartedAt: observedProcessStartedAt
             )
             managed.session.replaceAttributedProcesses([
                 AttributedProcess(
@@ -130,30 +162,54 @@ public actor ProcessSupervisor {
                     applicationID: plan.applicationID,
                     environmentID: plan.environmentID,
                     launchSessionID: plan.sessionID,
-                    isRootProcess: true
+                    isRootProcess: true,
+                    processStartedAt: observedProcessStartedAt
                 )
             ])
-            processes[managed.session.id] = managed
+            sessions[managed.session.id] = managed
             return managed.session
         } catch {
-            try? managed.session.transition(
-                to: .failed,
-                failureDescription: error.localizedDescription
-            )
-            completedSessions[managed.session.id] = managed.session
-            try? managed.logHandle.close()
+            fail(&managed, error: error)
             throw error
+        }
+    }
+
+    public func reconcileApplications(_ observations: [LiveWineApplicationObservation]) {
+        reapTerminatedState()
+        let byApplication = Dictionary(uniqueKeysWithValues: observations.map {
+            ($0.applicationID, $0)
+        })
+        for id in Array(sessions.keys) {
+            guard var managed = sessions[id],
+                  managed.terminationPlan != nil,
+                  managed.session.state == .running,
+                  let applicationID = managed.session.applicationID else { continue }
+            guard let observation = byApplication[applicationID],
+                  managed.session.environmentID == observation.environmentID,
+                  managed.session.rootProcessIdentifier == observation.processIdentifier,
+                  startTimesMatch(
+                    managed.session.rootProcessStartedAt,
+                    observation.processIdentity.startedAt
+                  ) else {
+                sessions.removeValue(forKey: id)
+                try? managed.session.transition(to: .exited)
+                completedSessions[id] = managed.session
+                continue
+            }
         }
     }
 
     @discardableResult
     public func runAndWait(_ plan: ProcessPlan) throws -> Int32 {
         try validate(plan)
-        let managed = try makeManagedProcess(plan)
-        try managed.process.run()
-        managed.process.waitUntilExit()
-        try? managed.logHandle.close()
-        return managed.process.terminationStatus
+        var managed = try makeManagedSession(plan)
+        guard let process = managed.process else {
+            throw StillCoreError.invalidStore("The process was not prepared.")
+        }
+        try process.run()
+        process.waitUntilExit()
+        closeResources(&managed)
+        return process.terminationStatus
     }
 
     public func stop(sessionID: LaunchSession.ID) throws {
@@ -164,114 +220,105 @@ public actor ProcessSupervisor {
         try terminate(sessionID: sessionID, force: true)
     }
 
-    public func stopAll() {
-        terminateAll(force: false)
+    public func stopAll() throws {
+        try terminateAll(force: false)
     }
 
-    public func forceStopAll() {
-        terminateAll(force: true)
+    public func forceStopAll() throws {
+        try terminateAll(force: true)
     }
 
     public func session(id: LaunchSession.ID) -> LaunchSession? {
-        reapTerminatedProcesses()
-        return processes[id]?.session ?? completedSessions[id]
+        reapTerminatedState()
+        return sessions[id]?.session ?? completedSessions[id]
     }
 
     public func activeSessions() -> [LaunchSession] {
-        reapTerminatedProcesses()
-        return processes.values
+        reapTerminatedState()
+        return sessions.values
             .map(\.session)
             .filter { $0.state.isActive }
             .sorted { $0.startedAt < $1.startedAt }
     }
 
     private func terminate(sessionID: LaunchSession.ID, force: Bool) throws {
-        reapTerminatedProcesses()
-        guard var managed = processes[sessionID] else {
+        reapTerminatedState()
+        guard let managed = sessions[sessionID] else {
             throw StillCoreError.sessionNotFound(sessionID)
         }
-        guard managed.session.state == .running else {
-            return
-        }
-        if let terminationPlan = managed.terminationPlan {
-            try runTerminationPlan(
-                terminationPlan,
-                force: force,
-                logURL: managed.session.logURL
-            )
-            let matchingIDs: [LaunchSession.ID]
-            if terminationPlan.hostProcessPathPrefix == nil {
-                matchingIDs = processes.compactMap { id, candidate in
-                    candidate.terminationPlan?.scopeIdentifier
-                        == terminationPlan.scopeIdentifier ? id : nil
-                }
-            } else {
-                matchingIDs = [sessionID]
-                if managed.process.isRunning {
-                    if force {
-                        Darwin.kill(managed.process.processIdentifier, SIGKILL)
-                    } else {
-                        managed.process.terminate()
-                    }
-                    managed.process.waitUntilExit()
-                }
-            }
-            for id in matchingIDs {
-                guard var candidate = processes[id], candidate.session.state == .running else {
-                    continue
-                }
-                try candidate.session.transition(to: .stopping)
-                processes[id] = candidate
-            }
+        guard managed.session.state.isActive else { return }
+        if let plan = managed.terminationPlan,
+           plan.monitorExecutableURL != nil {
+            try runTerminationPlan(plan, force: force, logURL: managed.session.logURL)
+            try markScopeStopping(plan.scopeIdentifier)
         } else {
-            try managed.session.transition(to: .stopping)
-            processes[sessionID] = managed
-            if managed.process.isRunning {
+            guard var candidate = sessions[sessionID] else { return }
+            if candidate.session.state == .running || candidate.session.state == .launching {
+                try candidate.session.transition(to: .stopping)
+            }
+            if let process = candidate.process, process.isRunning {
                 if force {
-                    Darwin.kill(managed.process.processIdentifier, SIGKILL)
+                    Darwin.kill(process.processIdentifier, SIGKILL)
                 } else {
-                    managed.process.terminate()
+                    process.terminate()
                 }
             }
+            sessions[sessionID] = candidate
         }
-        reapTerminatedProcesses()
+        reapTerminatedState()
     }
 
-    private func terminateAll(force: Bool) {
-        reapTerminatedProcesses()
-        let scopedPlans = Dictionary(grouping: processes.compactMap { id, managed in
-            managed.terminationPlan.map { (id, $0) }
-        }) { _, plan in
-            plan.scopeIdentifier
-        }
-        var handledIDs = Set<LaunchSession.ID>()
-
-        for (_, scopedEntries) in scopedPlans {
-            guard let plan = scopedEntries.first?.1 else { continue }
+    private func terminateAll(force: Bool) throws {
+        reapTerminatedState()
+        let scopedPlans = Dictionary(
+            grouping: sessions.values.compactMap {
+                $0.terminationPlan?.monitorExecutableURL == nil ? nil : $0.terminationPlan
+            },
+            by: \.scopeIdentifier
+        )
+        var failures: [String] = []
+        for (scope, plans) in scopedPlans {
+            guard let plan = plans.first else { continue }
             do {
-                try runTerminationPlan(
-                    plan,
-                    force: force,
-                    logURL: scopedEntries.first.flatMap { processes[$0.0]?.session.logURL },
-                    respectHostProcessScope: false
-                )
-                for (id, _) in scopedEntries {
-                    guard var managed = processes[id], managed.session.state == .running else {
-                        continue
-                    }
-                    try managed.session.transition(to: .stopping)
-                    processes[id] = managed
-                    handledIDs.insert(id)
-                }
+                let logURL = sessions.values.first {
+                    $0.terminationPlan?.scopeIdentifier == scope
+                }?.session.logURL
+                try runTerminationPlan(plan, force: force, logURL: logURL)
+                try markScopeStopping(scope)
             } catch {
-                continue
+                failures.append("\(scope): \(error.localizedDescription)")
             }
         }
-
-        for id in Array(processes.keys) where !handledIDs.contains(id) {
-            try? terminate(sessionID: id, force: force)
+        for id in Array(sessions.keys) where sessions[id]?.terminationPlan?.monitorExecutableURL == nil {
+            do {
+                try terminate(sessionID: id, force: force)
+            } catch {
+                failures.append("\(id): \(error.localizedDescription)")
+            }
         }
-        reapTerminatedProcesses()
+        reapTerminatedState()
+        if !failures.isEmpty { throw StillCoreError.terminationFailed(failures) }
+    }
+
+    private func markScopeStopping(_ scopeIdentifier: String) throws {
+        for id in Array(sessions.keys) {
+            guard var managed = sessions[id],
+                  managed.terminationPlan?.scopeIdentifier == scopeIdentifier,
+                  managed.session.state == .running || managed.session.state == .launching else {
+                continue
+            }
+            try managed.session.transition(to: .stopping)
+            sessions[id] = managed
+        }
+    }
+
+    private func rejectDuplicateApplication(_ applicationID: LibraryApplication.ID?) throws {
+        if let applicationID,
+           sessions.values.contains(where: {
+               $0.session.applicationID == applicationID && $0.session.state.isActive
+           }) {
+            throw StillCoreError.duplicateLaunch(applicationID)
+        }
     }
 
     private func validate(_ plan: ProcessPlan) throws {
@@ -280,7 +327,7 @@ public actor ProcessSupervisor {
         }
     }
 
-    private func makeManagedProcess(_ plan: ProcessPlan) throws -> ManagedProcess {
+    private func makeManagedSession(_ plan: ProcessPlan) throws -> ManagedSession {
         try fileManager.createDirectory(
             at: plan.logURL.deletingLastPathComponent(),
             withIntermediateDirectories: true
@@ -288,18 +335,15 @@ public actor ProcessSupervisor {
         if !fileManager.fileExists(atPath: plan.logURL.path) {
             fileManager.createFile(atPath: plan.logURL.path, contents: nil)
         }
-
         let logHandle = try FileHandle(forWritingTo: plan.logURL)
-        let process = makeProcess(
-            executableURL: plan.executableURL,
-            arguments: plan.arguments,
-            environment: plan.environment,
-            workingDirectoryURL: plan.workingDirectoryURL,
-            logHandle: logHandle
-        )
-
-        return ManagedProcess(
-            process: process,
+        return ManagedSession(
+            process: makeProcess(
+                executableURL: plan.executableURL,
+                arguments: plan.arguments,
+                environment: plan.environment,
+                workingDirectoryURL: plan.workingDirectoryURL,
+                logHandle: logHandle
+            ),
             logHandle: logHandle,
             terminationPlan: plan.terminationPlan,
             session: LaunchSession(
@@ -309,6 +353,39 @@ public actor ProcessSupervisor {
                 logURL: plan.logURL
             )
         )
+    }
+
+    private func ensureEnvironmentMonitor(
+        _ plan: ProcessTerminationPlan,
+        logURL: URL
+    ) throws {
+        if let existing = monitors[plan.scopeIdentifier], existing.process.isRunning { return }
+        if let stale = monitors.removeValue(forKey: plan.scopeIdentifier) {
+            try? stale.logHandle.close()
+        }
+        guard let executableURL = plan.monitorExecutableURL else {
+            throw StillCoreError.invalidStore("The Environment monitor is unavailable.")
+        }
+        let handle = try FileHandle(forWritingTo: logURL)
+        try handle.seekToEnd()
+        let process = makeProcess(
+            executableURL: executableURL,
+            arguments: plan.monitorArguments,
+            environment: plan.environment,
+            workingDirectoryURL: plan.workingDirectoryURL,
+            logHandle: handle
+        )
+        do {
+            try process.run()
+            monitors[plan.scopeIdentifier] = EnvironmentMonitor(
+                process: process,
+                logHandle: handle,
+                plan: plan
+            )
+        } catch {
+            try? handle.close()
+            throw error
+        }
     }
 
     private func makeProcess(
@@ -331,21 +408,10 @@ public actor ProcessSupervisor {
     private func runTerminationPlan(
         _ plan: ProcessTerminationPlan,
         force: Bool,
-        logURL: URL?,
-        respectHostProcessScope: Bool = true
+        logURL: URL?
     ) throws {
-        if respectHostProcessScope,
-           let hostProcessPathPrefix = plan.hostProcessPathPrefix {
-            _ = try HostProcessTerminator.terminateProcesses(
-                matchingWindowsPathPrefix: hostProcessPathPrefix,
-                force: force
-            )
-            return
-        }
         let process = Process()
-        process.executableURL = force
-            ? plan.forceExecutableURL
-            : plan.gracefulExecutableURL
+        process.executableURL = force ? plan.forceExecutableURL : plan.gracefulExecutableURL
         process.arguments = force ? plan.forceArguments : plan.gracefulArguments
         process.environment = plan.environment
         process.currentDirectoryURL = plan.workingDirectoryURL
@@ -395,25 +461,69 @@ public actor ProcessSupervisor {
         }
     }
 
-    private func reapTerminatedProcesses() {
-        let terminatedIDs = processes.compactMap { id, managed in
-            managed.process.isRunning ? nil : id
+    private func reapTerminatedState() {
+        let stoppedScopes = monitors.compactMap { scope, monitor in
+            monitor.process.isRunning ? nil : scope
         }
-        for id in terminatedIDs {
-            guard var managed = processes.removeValue(forKey: id) else { continue }
-            if managed.session.state == .running {
+        for scope in stoppedScopes {
+            guard let monitor = monitors.removeValue(forKey: scope) else { continue }
+            try? monitor.logHandle.close()
+            for id in Array(sessions.keys) {
+                guard var managed = sessions[id],
+                      managed.terminationPlan?.scopeIdentifier == scope else { continue }
+                sessions.removeValue(forKey: id)
+                if managed.session.state == .launching {
+                    try? managed.session.transition(
+                        to: .failed,
+                        failureDescription: "The Environment monitor exited before the application was observed."
+                    )
+                } else if managed.session.state == .running || managed.session.state == .stopping {
+                    try? managed.session.transition(
+                        to: .exited,
+                        exitCode: monitor.process.terminationStatus
+                    )
+                }
+                completedSessions[id] = managed.session
+            }
+        }
+
+        for id in Array(sessions.keys) {
+            guard var managed = sessions[id],
+                  managed.terminationPlan?.monitorExecutableURL == nil,
+                  let process = managed.process,
+                  !process.isRunning else { continue }
+            sessions.removeValue(forKey: id)
+            if managed.session.state == .running || managed.session.state == .stopping {
                 try? managed.session.transition(
                     to: .exited,
-                    exitCode: managed.process.terminationStatus
-                )
-            } else if managed.session.state == .stopping {
-                try? managed.session.transition(
-                    to: .exited,
-                    exitCode: managed.process.terminationStatus
+                    exitCode: process.terminationStatus
                 )
             }
+            closeResources(&managed)
             completedSessions[id] = managed.session
-            try? managed.logHandle.close()
         }
+    }
+
+    private func fail(_ managed: inout ManagedSession, error: Error) {
+        if managed.session.state == .launching {
+            try? managed.session.transition(
+                to: .failed,
+                failureDescription: error.localizedDescription
+            )
+        }
+        closeResources(&managed)
+        completedSessions[managed.session.id] = managed.session
+    }
+
+    private func closeResources(_ managed: inout ManagedSession) {
+        if let process = managed.process, process.isRunning { process.terminate() }
+        try? managed.logHandle?.close()
+        managed.process = nil
+        managed.logHandle = nil
+    }
+
+    private func startTimesMatch(_ lhs: Date?, _ rhs: Date?) -> Bool {
+        guard let lhs, let rhs else { return true }
+        return abs(lhs.timeIntervalSince(rhs)) <= 2
     }
 }

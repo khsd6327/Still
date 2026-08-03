@@ -40,6 +40,8 @@ public enum StillCoreError: LocalizedError, Equatable {
     case permanentDeletionConfirmationRequired
     case deletionCleanupPending(URL)
     case verificationFailed(String)
+    case terminationFailed([String])
+    case launchReadinessTimedOut(String)
 
     public var errorDescription: String? {
         switch self {
@@ -121,6 +123,10 @@ public enum StillCoreError: LocalizedError, Equatable {
             "The Environment was removed from Still, but file cleanup remains pending at: \(url.path)"
         case .verificationFailed(let reason):
             "File verification failed. \(reason)"
+        case .terminationFailed(let failures):
+            "One or more processes could not be stopped. \(failures.joined(separator: "; "))"
+        case .launchReadinessTimedOut(let applicationName):
+            "\(applicationName) did not expose a running process before the launch timeout."
         }
     }
 }

@@ -6,7 +6,7 @@ final class StillApplicationDelegate: NSObject, NSApplicationDelegate {
     weak var model: AppModel?
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        guard let model, !model.sessions.isEmpty else { return .terminateNow }
+        guard let model, model.hasLiveWineActivity else { return .terminateNow }
 
         let alert = NSAlert()
         alert.messageText = "Windows applications are still running."
@@ -19,8 +19,8 @@ final class StillApplicationDelegate: NSObject, NSApplicationDelegate {
             return .terminateNow
         case .alertSecondButtonReturn:
             Task {
-                await model.stopAllNormally()
-                sender.reply(toApplicationShouldTerminate: true)
+                let stopped = await model.stopAllNormally()
+                sender.reply(toApplicationShouldTerminate: stopped)
             }
             return .terminateLater
         default:
@@ -70,7 +70,7 @@ struct WindowCloseGuard: NSViewRepresentable {
         func windowShouldClose(_ sender: NSWindow) -> Bool {
             guard !bypassNextClose,
                   let model,
-                  !model.sessions.isEmpty else {
+                  model.hasLiveWineActivity else {
                 bypassNextClose = false
                 return true
             }
@@ -111,9 +111,10 @@ struct WindowCloseGuard: NSViewRepresentable {
 
         private func stopThenClose(_ window: NSWindow, model: AppModel) {
             Task {
-                await model.stopAllNormally()
-                bypassNextClose = true
-                window.performClose(nil)
+                if await model.stopAllNormally() {
+                    bypassNextClose = true
+                    window.performClose(nil)
+                }
             }
         }
     }

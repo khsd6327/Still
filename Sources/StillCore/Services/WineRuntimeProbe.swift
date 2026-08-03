@@ -7,6 +7,7 @@ public struct HostProcessSnapshot: Equatable, Sendable {
     public let cpuPercent: Double
     public let elapsedSeconds: TimeInterval
     public let command: String
+    public let startedAt: Date?
 
     public init(
         processIdentifier: Int32,
@@ -14,7 +15,8 @@ public struct HostProcessSnapshot: Equatable, Sendable {
         residentMemoryKilobytes: UInt64,
         cpuPercent: Double,
         elapsedSeconds: TimeInterval,
-        command: String
+        command: String,
+        startedAt: Date? = nil
     ) {
         self.processIdentifier = processIdentifier
         self.parentProcessIdentifier = parentProcessIdentifier
@@ -22,6 +24,30 @@ public struct HostProcessSnapshot: Equatable, Sendable {
         self.cpuPercent = cpuPercent
         self.elapsedSeconds = elapsedSeconds
         self.command = command
+        self.startedAt = startedAt
+    }
+
+    public var identity: HostProcessIdentity {
+        HostProcessIdentity(
+            processIdentifier: processIdentifier,
+            startedAt: startedAt
+        )
+    }
+}
+
+public struct HostProcessIdentity: Equatable, Hashable, Sendable {
+    public let processIdentifier: Int32
+    public let startedAt: Date?
+
+    public init(processIdentifier: Int32, startedAt: Date?) {
+        self.processIdentifier = processIdentifier
+        self.startedAt = startedAt
+    }
+
+    public func matches(_ snapshot: HostProcessSnapshot, tolerance: TimeInterval = 2) -> Bool {
+        guard processIdentifier == snapshot.processIdentifier else { return false }
+        guard let startedAt, let candidateStartedAt = snapshot.startedAt else { return true }
+        return abs(startedAt.timeIntervalSince(candidateStartedAt)) <= tolerance
     }
 }
 
@@ -30,17 +56,23 @@ public struct LiveWineApplicationObservation: Equatable, Sendable {
     public let environmentID: WindowsEnvironment.ID
     public let processIdentifier: Int32
     public let processName: String
+    public let processIdentity: HostProcessIdentity
 
     public init(
         applicationID: LibraryApplication.ID,
         environmentID: WindowsEnvironment.ID,
         processIdentifier: Int32,
-        processName: String
+        processName: String,
+        processIdentity: HostProcessIdentity? = nil
     ) {
         self.applicationID = applicationID
         self.environmentID = environmentID
         self.processIdentifier = processIdentifier
         self.processName = processName
+        self.processIdentity = processIdentity ?? HostProcessIdentity(
+            processIdentifier: processIdentifier,
+            startedAt: nil
+        )
     }
 }
 
@@ -58,10 +90,16 @@ public enum WineRuntimeProbe {
         guard process.terminationStatus == 0 else {
             throw StillCoreError.processFailed(process.terminationStatus)
         }
-        return parseProcessList(String(decoding: data, as: UTF8.self))
+        return parseProcessList(
+            String(decoding: data, as: UTF8.self),
+            capturedAt: .now
+        )
     }
 
-    public static func parseProcessList(_ output: String) -> [HostProcessSnapshot] {
+    public static func parseProcessList(
+        _ output: String,
+        capturedAt: Date? = nil
+    ) -> [HostProcessSnapshot] {
         output.split(whereSeparator: \.isNewline).compactMap { rawLine in
             let fields = rawLine.split(
                 maxSplits: 5,
@@ -82,8 +120,52 @@ public enum WineRuntimeProbe {
                 residentMemoryKilobytes: residentMemoryKilobytes,
                 cpuPercent: cpuPercent,
                 elapsedSeconds: elapsedSeconds,
-                command: String(fields[5])
+                command: String(fields[5]),
+                startedAt: capturedAt?.addingTimeInterval(-elapsedSeconds)
             )
+        }
+    }
+
+    public static func hasEnvironmentValue(
+        _ key: String,
+        value: String,
+        in command: String
+    ) -> Bool {
+        let marker = "\(key)=\(value)"
+        var searchStart = command.startIndex
+        while let range = command.range(of: marker, range: searchStart..<command.endIndex) {
+            let startsAtBoundary = range.lowerBound == command.startIndex
+                || command[command.index(before: range.lowerBound)].isWhitespace
+            let endsAtBoundary = range.upperBound == command.endIndex
+                || command[range.upperBound].isWhitespace
+            if startsAtBoundary && endsAtBoundary { return true }
+            searchStart = range.upperBound
+        }
+        return false
+    }
+
+    public static func belongs(
+        _ process: HostProcessSnapshot,
+        to environment: WindowsEnvironment
+    ) -> Bool {
+        hasEnvironmentValue(
+            "WINEPREFIX",
+            value: environment.prefixURL.standardizedFileURL.path,
+            in: process.command
+        )
+    }
+
+    public static func orphanedMonitorProcesses(
+        in processes: [HostProcessSnapshot],
+        environments: [WindowsEnvironment]
+    ) -> [HostProcessSnapshot] {
+        processes.filter { process in
+            guard process.parentProcessIdentifier == 1,
+                  process.command.contains("wineserver -w"),
+                  process.command.contains("STILL_MONITOR_TOKEN=") else {
+                return false
+            }
+            return environments.contains { belongs(process, to: $0) }
         }
     }
 
@@ -91,17 +173,8 @@ public enum WineRuntimeProbe {
         in processes: [HostProcessSnapshot],
         environments: [WindowsEnvironment]
     ) -> [Int32] {
-        let prefixMarkers = environments.map {
-            "WINEPREFIX=\($0.prefixURL.standardizedFileURL.path)"
-        }
-        return processes.compactMap { process in
-            guard process.parentProcessIdentifier == 1,
-                  process.command.contains("wineserver -w"),
-                  prefixMarkers.contains(where: process.command.contains) else {
-                return nil
-            }
-            return process.processIdentifier
-        }
+        orphanedMonitorProcesses(in: processes, environments: environments)
+            .map(\.processIdentifier)
     }
 
     public static func liveEnvironmentIDs(
@@ -109,12 +182,28 @@ public enum WineRuntimeProbe {
         environments: [WindowsEnvironment]
     ) -> Set<WindowsEnvironment.ID> {
         Set(environments.compactMap { environment in
-            let prefixMarker = "WINEPREFIX=\(environment.prefixURL.standardizedFileURL.path)"
             return processes.contains {
-                $0.command.contains(prefixMarker)
+                belongs($0, to: environment)
                     && $0.command.localizedCaseInsensitiveContains("wineserver")
             } ? environment.id : nil
         })
+    }
+
+    public static func requireStopped(
+        environmentID: WindowsEnvironment.ID,
+        environments: [WindowsEnvironment],
+        processes: [HostProcessSnapshot],
+        sessions: [LaunchSession]
+    ) throws {
+        guard !sessions.contains(where: {
+            $0.environmentID == environmentID && $0.state.isActive
+        }),
+        !liveEnvironmentIDs(
+            in: processes,
+            environments: environments.filter { $0.id == environmentID }
+        ).contains(environmentID) else {
+            throw StillCoreError.environmentMustBeStopped(environmentID)
+        }
     }
 
     public static func observeApplications(
@@ -150,6 +239,7 @@ public enum WineRuntimeProbe {
                 )
             }
             let matches = processes.filter { process in
+                guard belongs(process, to: environment) else { return false }
                 let command = process.command.lowercased()
                 let identifiesApplication = if usesLauncher,
                                                let workingDirectoryPrefix {
@@ -168,7 +258,8 @@ public enum WineRuntimeProbe {
                 applicationID: application.id,
                 environmentID: application.environmentID,
                 processIdentifier: process.processIdentifier,
-                processName: entry.executableURL.lastPathComponent
+                processName: entry.executableURL.lastPathComponent,
+                processIdentity: process.identity
             )
         }
     }
@@ -186,6 +277,7 @@ public enum WineRuntimeProbe {
         )
         let executableName = entry.executableURL.lastPathComponent.lowercased()
         let matches = processes.filter { process in
+            guard belongs(process, to: environment) else { return false }
             if let windowsPrefix,
                process.command.localizedCaseInsensitiveContains(windowsPrefix) {
                 return true

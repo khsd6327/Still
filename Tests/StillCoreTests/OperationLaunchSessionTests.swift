@@ -56,6 +56,43 @@ final class OperationLaunchSessionTests: XCTestCase {
         XCTAssertEqual(reloaded.first(where: { $0.id == interrupted.id })?.state, .failed)
     }
 
+    func testRunningLaunchOperationIsRecoveredAsSuccessWhenApplicationIsObserved() async throws {
+        let rootURL = temporaryRoot("RecoveredLaunch")
+        defer { try? FileManager.default.removeItem(at: rootURL) }
+        let environment = WindowsEnvironment(
+            name: "Test",
+            prefixURL: rootURL.appending(path: "Prefix")
+        )
+        let applicationID = UUID()
+        let entry = LaunchEntry(
+            applicationID: applicationID,
+            executableURL: environment.prefixURL.appending(path: "drive_c/Game/game.exe")
+        )
+        let application = LibraryApplication(
+            id: applicationID,
+            environmentID: environment.id,
+            name: "Game",
+            launchEntryIDs: [entry.id]
+        )
+        let store = JSONStillStore(rootURL: rootURL)
+        try await store.saveEnvironment(environment)
+        try await store.saveApplication(application, launchEntries: [entry])
+        var operation = StillOperation(
+            kind: .launchApplication,
+            environmentID: environment.id,
+            applicationID: applicationID
+        )
+        try operation.transition(to: .running)
+        try await store.saveOperation(operation)
+
+        let recovered = try await store.recoverInterruptedOperations(
+            activeApplicationIDs: [applicationID]
+        )
+
+        XCTAssertEqual(recovered.first?.state, .succeeded)
+        XCTAssertEqual(recovered.first?.resultSummary, "Recovered running application after restart.")
+    }
+
     func testEnvironmentRejectsConcurrentMutatingOperations() async throws {
         let environmentID = UUID()
         let first = StillOperation(kind: .repair, environmentID: environmentID)
@@ -155,7 +192,7 @@ final class OperationLaunchSessionTests: XCTestCase {
         XCTAssertTrue(isEmpty)
     }
 
-    func testForceStopAllUsesPrefixTerminationInsteadOfApplicationPathScope() async throws {
+    func testForceStopAllDoesNotUseLegacyApplicationPathScope() async throws {
         let rootURL = temporaryRoot("PrefixForceStopAll")
         defer { try? FileManager.default.removeItem(at: rootURL) }
         try FileManager.default.createDirectory(at: rootURL, withIntermediateDirectories: true)
@@ -181,9 +218,9 @@ final class OperationLaunchSessionTests: XCTestCase {
             terminationPlan: termination
         ))
 
-        await supervisor.forceStopAll()
+        try await supervisor.forceStopAll()
 
-        XCTAssertTrue(FileManager.default.fileExists(atPath: markerURL.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: markerURL.path))
         try await Task.sleep(for: .milliseconds(150))
         let activeSessions = await supervisor.activeSessions()
         XCTAssertTrue(activeSessions.isEmpty)
@@ -193,41 +230,58 @@ final class OperationLaunchSessionTests: XCTestCase {
         let rootURL = temporaryRoot("WineScope")
         defer { try? FileManager.default.removeItem(at: rootURL) }
         let supervisor = ProcessSupervisor()
+        let stopMarkerURL = rootURL.appending(path: "stop")
+        let monitorScript = "while [ ! -f \"$1\" ]; do sleep 0.01; done"
         let termination = ProcessTerminationPlan(
             scopeIdentifier: rootURL.path,
-            gracefulExecutableURL: URL(filePath: "/usr/bin/true"),
-            gracefulArguments: [],
-            forceExecutableURL: URL(filePath: "/usr/bin/true"),
-            forceArguments: [],
+            gracefulExecutableURL: URL(filePath: "/usr/bin/touch"),
+            gracefulArguments: [stopMarkerURL.path],
+            forceExecutableURL: URL(filePath: "/usr/bin/touch"),
+            forceArguments: [stopMarkerURL.path],
+            monitorExecutableURL: URL(filePath: "/bin/sh"),
+            monitorArguments: ["-c", monitorScript, "monitor", stopMarkerURL.path],
             environment: [:],
             workingDirectoryURL: rootURL,
             acceptedExitCodes: [0]
         )
         try FileManager.default.createDirectory(at: rootURL, withIntermediateDirectories: true)
-        let first = try await supervisor.launch(ProcessPlan(
+        let firstPlan = ProcessPlan(
             applicationID: UUID(),
             environmentID: UUID(),
-            executableURL: URL(filePath: "/bin/sleep"),
-            arguments: ["0.2"],
+            executableURL: URL(filePath: "/usr/bin/true"),
+            arguments: [],
             logURL: rootURL.appending(path: "first.log"),
             terminationPlan: termination
-        ))
-        let second = try await supervisor.launch(ProcessPlan(
+        )
+        let secondPlan = ProcessPlan(
             applicationID: UUID(),
             environmentID: UUID(),
-            executableURL: URL(filePath: "/bin/sleep"),
-            arguments: ["0.2"],
+            executableURL: URL(filePath: "/usr/bin/true"),
+            arguments: [],
             logURL: rootURL.appending(path: "second.log"),
             terminationPlan: termination
-        ))
+        )
+        let first = try await supervisor.adopt(
+            firstPlan,
+            observedProcessIdentifier: 100,
+            observedProcessName: "first.exe"
+        )
+        let second = try await supervisor.adopt(
+            secondPlan,
+            observedProcessIdentifier: 101,
+            observedProcessName: "second.exe"
+        )
 
         try await supervisor.stop(sessionID: first.id)
 
         let firstState = await supervisor.session(id: first.id)?.state
         let secondState = await supervisor.session(id: second.id)?.state
-        XCTAssertEqual(firstState, .stopping)
-        XCTAssertEqual(secondState, .stopping)
-        try await Task.sleep(for: .milliseconds(250))
+        XCTAssertTrue(firstState == .stopping || firstState == .exited)
+        XCTAssertTrue(secondState == .stopping || secondState == .exited)
+        for _ in 0..<50 {
+            if await supervisor.activeSessions().isEmpty { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
         let activeSessions = await supervisor.activeSessions()
         XCTAssertTrue(activeSessions.isEmpty)
     }
@@ -275,6 +329,10 @@ final class OperationLaunchSessionTests: XCTestCase {
 
         try await supervisor.stop(sessionID: first.id)
 
+        for _ in 0..<50 {
+            if await supervisor.session(id: first.id)?.state == .exited { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
         let firstState = await supervisor.session(id: first.id)?.state
         let secondState = await supervisor.session(id: second.id)?.state
         XCTAssertEqual(firstState, .exited)
@@ -349,7 +407,16 @@ final class OperationLaunchSessionTests: XCTestCase {
         ))
 
         XCTAssertTrue(FileManager.default.fileExists(atPath: markerURL.path))
-        let runningState = await supervisor.session(id: session.id)?.state
+        let confirmed = try await supervisor.confirmRunning(
+            sessionID: session.id,
+            observation: LiveWineApplicationObservation(
+                applicationID: session.applicationID!,
+                environmentID: session.environmentID!,
+                processIdentifier: 321,
+                processName: "game.exe"
+            )
+        )
+        let runningState = confirmed.state
         XCTAssertEqual(runningState, .running)
         try await Task.sleep(for: .milliseconds(250))
         let activeSessions = await supervisor.activeSessions()

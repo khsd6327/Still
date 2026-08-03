@@ -53,7 +53,7 @@ final class WineProcessTests: XCTestCase {
         XCTAssertEqual(plan.terminationPlan?.monitorArguments, ["-w"])
     }
 
-    func testLaunchPlanScopesHostTerminationToWindowsWorkingDirectory() {
+    func testLaunchPlanUsesEnvironmentScopeInsteadOfHostPathTermination() {
         let bottle = Bottle(
             name: "Steam",
             prefixURL: URL(filePath: "/tmp/Still Bottle"),
@@ -80,10 +80,9 @@ final class WineProcessTests: XCTestCase {
             logURL: URL(filePath: "/tmp/still.log")
         )
 
-        XCTAssertEqual(
-            plan.terminationPlan?.hostProcessPathPrefix,
-            "C:\\Program Files (x86)\\Steam\\steamapps\\common\\ChaosMarket\\"
-        )
+        XCTAssertNil(plan.terminationPlan?.hostProcessPathPrefix)
+        XCTAssertEqual(plan.terminationPlan?.scopeIdentifier, bottle.prefixURL.path)
+        XCTAssertNotNil(plan.terminationPlan?.environment["STILL_MONITOR_TOKEN"])
     }
 
     func testHostProcessListParserPreservesCommandLine() {

@@ -68,7 +68,7 @@ public struct DiscoveryResult: Sendable {
     public let reconcilableProviderIDs: Set<String>
 }
 
-public protocol ApplicationDiscoveryProvider {
+public protocol ApplicationDiscoveryProvider: Sendable {
     var id: String { get }
     var removesMissingApplications: Bool { get }
     func discover(in bottle: Bottle) throws -> ProviderDiscoveryResult

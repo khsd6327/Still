@@ -24,9 +24,9 @@ public actor TerminationCoordinator {
         case (.session(let id), .force):
             try await supervisor.forceStop(sessionID: id)
         case (.all, .normal):
-            await supervisor.stopAll()
+            try await supervisor.stopAll()
         case (.all, .force):
-            await supervisor.forceStopAll()
+            try await supervisor.forceStopAll()
         }
     }
 }

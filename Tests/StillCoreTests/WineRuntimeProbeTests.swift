@@ -33,7 +33,7 @@ final class WineRuntimeProbeTests: XCTestCase {
                 residentMemoryKilobytes: 512,
                 cpuPercent: 0,
                 elapsedSeconds: 10,
-                command: "/opt/wine/bin/wineserver -w WINEPREFIX=/tmp/Still Prefix"
+                command: "/opt/wine/bin/wineserver -w WINEPREFIX=/tmp/Still Prefix STILL_MONITOR_TOKEN=owned"
             ),
             HostProcessSnapshot(
                 processIdentifier: 201,
@@ -92,7 +92,7 @@ final class WineRuntimeProbeTests: XCTestCase {
                 residentMemoryKilobytes: 10_000,
                 cpuPercent: 20,
                 elapsedSeconds: 3,
-                command: "C:\\Games\\Sample\\game.exe --play"
+                command: "C:\\Games\\Sample\\game.exe --play WINEPREFIX=/tmp/Still Prefix"
             )
         ]
 
@@ -152,7 +152,7 @@ final class WineRuntimeProbeTests: XCTestCase {
                 residentMemoryKilobytes: 1,
                 cpuPercent: 0,
                 elapsedSeconds: 1,
-                command: "C:\\Program Files\\Steam\\steam.exe"
+                command: "C:\\Program Files\\Steam\\steam.exe WINEPREFIX=/tmp/Prefix"
             )
         ]
 
@@ -190,14 +190,14 @@ final class WineRuntimeProbeTests: XCTestCase {
                 residentMemoryKilobytes: 1_024,
                 cpuPercent: 5,
                 elapsedSeconds: 1,
-                command: "C:\\Program Files\\Steam\\steam.exe"
+                command: "C:\\Program Files\\Steam\\steam.exe WINEPREFIX=/tmp/Prefix"
             ),
             HostProcessSnapshot(
                 processIdentifier: 11,
                 residentMemoryKilobytes: 2_048,
                 cpuPercent: 7.5,
                 elapsedSeconds: 1,
-                command: "C:\\Program Files\\Steam\\steamwebhelper.exe"
+                command: "C:\\Program Files\\Steam\\steamwebhelper.exe WINEPREFIX=/tmp/Prefix"
             )
         ]
 
@@ -214,5 +214,98 @@ final class WineRuntimeProbeTests: XCTestCase {
         XCTAssertEqual(snapshot.residentMemoryBytes, 3_145_728)
         XCTAssertEqual(snapshot.graphicsBackend, .dxmt)
         XCTAssertEqual(snapshot.launchLatency, 4)
+    }
+
+    func testPrefixMatchingRequiresExactEnvironmentValueBoundary() {
+        let environment = WindowsEnvironment(
+            name: "Primary",
+            prefixURL: URL(filePath: "/tmp/Prefix")
+        )
+        let exact = HostProcessSnapshot(
+            processIdentifier: 1,
+            residentMemoryKilobytes: 1,
+            cpuPercent: 0,
+            elapsedSeconds: 1,
+            command: "wineserver -w WINEPREFIX=/tmp/Prefix HOME=/tmp"
+        )
+        let backup = HostProcessSnapshot(
+            processIdentifier: 2,
+            residentMemoryKilobytes: 1,
+            cpuPercent: 0,
+            elapsedSeconds: 1,
+            command: "wineserver -w WINEPREFIX=/tmp/Prefix-Backup HOME=/tmp"
+        )
+
+        XCTAssertTrue(WineRuntimeProbe.belongs(exact, to: environment))
+        XCTAssertFalse(WineRuntimeProbe.belongs(backup, to: environment))
+        XCTAssertEqual(
+            WineRuntimeProbe.liveEnvironmentIDs(
+                in: [backup],
+                environments: [environment]
+            ),
+            []
+        )
+    }
+
+    func testApplicationObservationCannotCrossEnvironmentBoundary() {
+        let first = WindowsEnvironment(name: "First", prefixURL: URL(filePath: "/tmp/First"))
+        let second = WindowsEnvironment(name: "Second", prefixURL: URL(filePath: "/tmp/Second"))
+        let applicationID = UUID()
+        let entry = LaunchEntry(
+            applicationID: applicationID,
+            executableURL: URL(filePath: "/tmp/First/drive_c/Games/game.exe")
+        )
+        let application = LibraryApplication(
+            id: applicationID,
+            environmentID: first.id,
+            name: "Game",
+            launchEntryIDs: [entry.id]
+        )
+        let records = [
+            HostProcessSnapshot(
+                processIdentifier: 10,
+                residentMemoryKilobytes: 1,
+                cpuPercent: 0,
+                elapsedSeconds: 1,
+                command: "wineserver -w WINEPREFIX=/tmp/First"
+            ),
+            HostProcessSnapshot(
+                processIdentifier: 20,
+                residentMemoryKilobytes: 1,
+                cpuPercent: 0,
+                elapsedSeconds: 1,
+                command: "C:\\Games\\game.exe WINEPREFIX=/tmp/Second"
+            )
+        ]
+
+        XCTAssertTrue(WineRuntimeProbe.observeApplications(
+            in: records,
+            environments: [first, second],
+            applications: [application],
+            launchEntries: [entry]
+        ).isEmpty)
+    }
+
+    func testRuntimeGuardRejectsUnattributedLiveWineServer() {
+        let environment = WindowsEnvironment(
+            name: "Running",
+            prefixURL: URL(filePath: "/tmp/Running")
+        )
+        let process = HostProcessSnapshot(
+            processIdentifier: 99,
+            residentMemoryKilobytes: 1,
+            cpuPercent: 0,
+            elapsedSeconds: 1,
+            command: "wineserver -w WINEPREFIX=/tmp/Running"
+        )
+
+        XCTAssertThrowsError(try WineRuntimeProbe.requireStopped(
+            environmentID: environment.id,
+            environments: [environment],
+            processes: [process],
+            sessions: []
+        )) { error in
+            XCTAssertEqual(error as? StillCoreError, .environmentMustBeStopped(environment.id))
+        }
     }
 }

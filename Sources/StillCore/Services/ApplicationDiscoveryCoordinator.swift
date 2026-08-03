@@ -1,6 +1,6 @@
 import Foundation
 
-public struct SteamDiscoveryProvider: ApplicationDiscoveryProvider {
+public struct SteamDiscoveryProvider: ApplicationDiscoveryProvider, @unchecked Sendable {
     public let id = "steam"
     public let removesMissingApplications = true
     private let scanner: SteamLibraryScanner
@@ -62,7 +62,7 @@ public struct SteamDiscoveryProvider: ApplicationDiscoveryProvider {
     }
 }
 
-public struct ExecutableDiscoveryProvider: ApplicationDiscoveryProvider {
+public struct ExecutableDiscoveryProvider: ApplicationDiscoveryProvider, @unchecked Sendable {
     public let id = "executable-fallback"
     private let scanner: WindowsExecutableScanner
 
@@ -85,7 +85,7 @@ public struct ExecutableDiscoveryProvider: ApplicationDiscoveryProvider {
     }
 }
 
-public struct ApplicationDiscoveryCoordinator {
+public struct ApplicationDiscoveryCoordinator: Sendable {
     private let providers: [any ApplicationDiscoveryProvider]
     private let automaticThreshold: DiscoveryConfidence
 

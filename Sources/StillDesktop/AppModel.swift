@@ -105,6 +105,8 @@ final class AppModel: ObservableObject {
     @Published var supportBundleDraft: SupportBundleDraft?
     @Published var supportBundleExportedURL: URL?
     private var acceptedEngineLicenseIDs: Set<String> = []
+    private var performanceSamplingTasks: [LibraryApplication.ID: Task<Void, Never>] = [:]
+    private var backgroundDiscoveryTask: Task<Void, Never>?
 
     init() {
         let defaults = UserDefaults.standard
@@ -153,11 +155,17 @@ final class AppModel: ObservableObject {
         return sessions.first { $0.applicationID == applicationID && $0.state.isActive }
     }
 
+    var hasLiveWineActivity: Bool {
+        !sessions.isEmpty || !liveEnvironmentIDs.isEmpty
+    }
+
     func runtimeState(for application: LibraryApplication) -> ApplicationRuntimeState {
         if launchingApplicationIDs.contains(application.id) { return .launching }
-        if sessions.contains(where: {
+        if let session = sessions.first(where: {
             $0.applicationID == application.id && $0.state.isActive
-        }) { return .running }
+        }) {
+            return session.state == .stopping ? .stopping : .running
+        }
         return .idle
     }
 
@@ -233,7 +241,6 @@ final class AppModel: ObservableObject {
             _ = try logRotationService.rotate(retentionDays: logRetentionDays)
             _ = try await deletionCoordinator.recoverInterruptedDeletions()
             _ = try await restoreCoordinator.recoverInterruptedRestores()
-            _ = try await store.recoverInterruptedOperations()
             var document = try await store.load()
             environments = document.environments
             applications = document.applications
@@ -245,17 +252,6 @@ final class AppModel: ObservableObject {
             try await store.synchronizeInstalledEngineBuilds(installedBuilds)
             document = try await store.load()
             environments = document.environments
-            var discoveryFailureCount = 0
-            if scanRegisteredEnvironments, !environments.isEmpty {
-                let summary = await discoverApplications(environmentID: nil)
-                discoveryFailureCount = summary.failureCount
-                pendingDiscoveryCandidates = summary.pending
-                document = try await store.load()
-                environments = document.environments
-                applications = document.applications
-                launchEntries = document.launchEntries
-                operations = document.operations.sorted { $0.createdAt > $1.createdAt }
-            }
             if !applications.contains(where: { $0.id == selectedApplicationID }) {
                 selectedApplicationID = applications.first?.id
             }
@@ -263,10 +259,15 @@ final class AppModel: ObservableObject {
                 selectedEnvironmentID = environments.first?.id
             }
             await reconcileLiveWineSessions()
-            libraryState = discoveryFailureCount == 0
-                ? .success(applications.isEmpty ? nil : "Library updated.")
-                : .partial("Some Environments could not be scanned.")
+            _ = try await store.recoverInterruptedOperations(
+                activeApplicationIDs: Set(sessions.compactMap(\.applicationID))
+            )
+            operations = (try? await store.operations()) ?? operations
+            libraryState = .success(applications.isEmpty ? nil : "Library updated.")
             activityState = .success(nil)
+            if scanRegisteredEnvironments, !environments.isEmpty {
+                scheduleBackgroundDiscovery()
+            }
         } catch {
             libraryState = .recovery(error.localizedDescription)
             activityState = .failure(error.localizedDescription)
@@ -412,6 +413,7 @@ final class AppModel: ObservableObject {
     }
 
     func scanApplications(environmentID: WindowsEnvironment.ID? = nil) async {
+        backgroundDiscoveryTask?.cancel()
         libraryState = .loading
         let summary = await discoverApplications(environmentID: environmentID)
         pendingDiscoveryCandidates = summary.pending
@@ -421,14 +423,53 @@ final class AppModel: ObservableObject {
             : .partial("Some Environments could not be scanned.")
     }
 
+    private func scheduleBackgroundDiscovery() {
+        backgroundDiscoveryTask?.cancel()
+        backgroundDiscoveryTask = Task { [weak self] in
+            guard let self else { return }
+            let summary = await self.discoverApplications(environmentID: nil)
+            guard !Task.isCancelled else { return }
+            self.pendingDiscoveryCandidates = summary.pending
+            do {
+                let document = try await self.store.load()
+                self.environments = document.environments
+                self.applications = document.applications
+                self.launchEntries = document.launchEntries
+                self.operations = document.operations.sorted { $0.createdAt > $1.createdAt }
+                await self.reconcileLiveWineSessions()
+                self.libraryState = summary.failureCount == 0
+                    ? .success("Application scan completed.")
+                    : .partial("Some Environments could not be scanned.")
+            } catch {
+                self.libraryState = .partial("The background application scan could not be applied.")
+            }
+        }
+    }
+
     private func discoverApplications(
         environmentID: WindowsEnvironment.ID?
     ) async -> (failureCount: Int, pending: [PendingDiscoveryCandidate]) {
         var failureCount = 0
         var pending: [PendingDiscoveryCandidate] = []
-        for environment in environments
-        where environmentID == nil || environment.id == environmentID {
-            let result = discoveryCoordinator.discover(in: bottle(from: environment))
+        let targets = environments.filter {
+            environmentID == nil || $0.id == environmentID
+        }
+        let coordinator = discoveryCoordinator
+        let discoveries = await withTaskGroup(
+            of: (WindowsEnvironment, DiscoveryResult).self,
+            returning: [(WindowsEnvironment, DiscoveryResult)].self
+        ) { group in
+            for environment in targets {
+                let targetBottle = bottle(from: environment)
+                group.addTask {
+                    (environment, coordinator.discover(in: targetBottle))
+                }
+            }
+            var values: [(WindowsEnvironment, DiscoveryResult)] = []
+            for await value in group { values.append(value) }
+            return values.sorted { $0.0.name < $1.0.name }
+        }
+        for (environment, result) in discoveries {
             if !result.providerFailures.isEmpty || !result.providerWarnings.isEmpty {
                 failureCount += 1
             }
@@ -475,7 +516,7 @@ final class AppModel: ObservableObject {
                 generation: UUID()
             )
             pendingDiscoveryCandidates.removeAll { $0.id == pending.id }
-            await load()
+            await load(scanRegisteredEnvironments: false)
         } catch { errorMessage = error.localizedDescription }
     }
 
@@ -483,12 +524,14 @@ final class AppModel: ObservableObject {
         pendingDiscoveryCandidates.removeAll { $0.id == pending.id }
     }
 
-    func performPrimaryApplicationAction() async {
-        guard let application = selectedApplication else { return }
+    func performPrimaryApplicationAction(applicationID: LibraryApplication.ID? = nil) async {
+        let targetID = applicationID ?? selectedApplicationID
+        guard let targetID,
+              let application = applications.first(where: { $0.id == targetID }) else { return }
         switch runtimeState(for: application) {
         case .idle:
-            await launchSelectedApplication()
-        case .launching:
+            await launchApplication(applicationID: targetID)
+        case .launching, .stopping:
             return
         case .running:
             await openRunningApplication(application)
@@ -496,12 +539,17 @@ final class AppModel: ObservableObject {
     }
 
     func launchSelectedApplication() async {
-        guard var application = selectedApplication,
+        guard let applicationID = selectedApplicationID else { return }
+        await launchApplication(applicationID: applicationID)
+    }
+
+    func launchApplication(applicationID: LibraryApplication.ID) async {
+        guard var application = applications.first(where: { $0.id == applicationID }),
               let environment = environments.first(where: { $0.id == application.environmentID }),
               let entryID = application.launchEntryIDs.first,
               let entry = launchEntries.first(where: { $0.id == entryID }) else { return }
         guard runtimeState(for: application) == .idle else {
-            await performPrimaryApplicationAction()
+            await performPrimaryApplicationAction(applicationID: applicationID)
             return
         }
         launchingApplicationIDs.insert(application.id)
@@ -548,7 +596,7 @@ final class AppModel: ObservableObject {
                     engineBuild: engineBuild,
                     registry: registry
                 )
-                let session = try await LocalWineEngine(
+                let pendingSession = try await LocalWineEngine(
                     descriptor: engine,
                     processSupervisor: supervisor
                 ).launch(LaunchRequest(
@@ -561,7 +609,17 @@ final class AppModel: ObservableObject {
                     environmentID: environment.id,
                     runtimeEvidence: resolved.runtimeEvidence
                 ))
-                sessions.append(session)
+                sessions = await supervisor.activeSessions()
+                let observation = try await waitForApplicationObservation(
+                    application: application,
+                    environment: environment,
+                    timeout: 30
+                )
+                let session = try await supervisor.confirmRunning(
+                    sessionID: pendingSession.id,
+                    observation: observation
+                )
+                sessions = await supervisor.activeSessions()
                 application.lastLaunchedAt = .now
                 try await store.saveApplication(
                     application,
@@ -569,7 +627,7 @@ final class AppModel: ObservableObject {
                 )
                 try operation.transition(
                     to: .succeeded,
-                    resultSummary: "Launch request accepted"
+                    resultSummary: "Application process observed"
                 )
                 try await store.saveOperation(operation)
                 await load(scanRegisteredEnvironments: false)
@@ -577,11 +635,20 @@ final class AppModel: ObservableObject {
                 activityState = .success("\(application.name) started.")
                 schedulePerformanceSampling(
                     applicationID: application.id,
+                    sessionID: session.id,
                     operationID: operation.id,
                     launchRequestedAt: launchRequestedAt
                 )
             }
         } catch {
+            if let pending = sessions.first(where: {
+                $0.applicationID == application.id && $0.state == .launching
+            }) {
+                await supervisor.failLaunch(
+                    sessionID: pending.id,
+                    reason: error.localizedDescription
+                )
+            }
             let message = launchFailureMessage(error, applicationName: application.name)
             if operation.state == .pending {
                 try? operation.transition(to: .cancelled, resultSummary: message)
@@ -605,7 +672,7 @@ final class AppModel: ObservableObject {
                 updated,
                 launchEntries: launchEntries.filter { $0.applicationID == updated.id }
             )
-            await load()
+            await load(scanRegisteredEnvironments: false)
             selectedApplicationID = updated.id
         } catch { errorMessage = error.localizedDescription }
     }
@@ -635,29 +702,56 @@ final class AppModel: ObservableObject {
     }
 
     func stopSelectedNormally() async {
-        guard let session = selectedSession else { return }
+        guard let applicationID = selectedApplicationID else { return }
+        await stopApplicationNormally(applicationID: applicationID)
+    }
+
+    func stopApplicationNormally(applicationID: LibraryApplication.ID) async {
+        guard let session = sessions.first(where: {
+            $0.applicationID == applicationID && $0.state.isActive
+        }) else { return }
         do {
+            if let applicationID = session.applicationID {
+                performanceSamplingTasks.removeValue(forKey: applicationID)?.cancel()
+            }
             try await supervisor.stop(sessionID: session.id)
             await refreshActivity()
         } catch { errorMessage = error.localizedDescription }
     }
 
-    func stopAllNormally() async {
-        await supervisor.stopAll()
-        await refreshActivity()
+    @discardableResult
+    func stopAllNormally() async -> Bool {
+        performanceSamplingTasks.values.forEach { $0.cancel() }
+        performanceSamplingTasks.removeAll()
+        do {
+            try await terminateAllWineActivity(force: false)
+            await refreshActivity()
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            await refreshActivity()
+            return false
+        }
     }
 
     func requestForceStopSelected() {
-        guard let session = selectedSession else { return }
+        guard let applicationID = selectedApplicationID else { return }
+        requestForceStop(applicationID: applicationID)
+    }
+
+    func requestForceStop(applicationID: LibraryApplication.ID) {
+        guard let session = sessions.first(where: {
+            $0.applicationID == applicationID && $0.state.isActive
+        }) else { return }
         pendingForceTermination = .selected(
             session.id,
-            selectedApplication?.name ?? "Selected Application"
+            applications.first(where: { $0.id == applicationID })?.name ?? "Selected Application"
         )
     }
 
     func requestForceStopAll() {
-        guard !sessions.isEmpty else { return }
-        pendingForceTermination = .all(sessions.count)
+        guard hasLiveWineActivity else { return }
+        pendingForceTermination = .all(max(sessions.count, liveEnvironmentIDs.count))
     }
 
     func confirmForceTermination() async {
@@ -668,7 +762,7 @@ final class AppModel: ObservableObject {
             case .selected(let id, _):
                 try await supervisor.forceStop(sessionID: id)
             case .all:
-                await supervisor.forceStopAll()
+                try await terminateAllWineActivity(force: true)
             }
             await refreshActivity()
         } catch { errorMessage = error.localizedDescription }
@@ -739,7 +833,7 @@ final class AppModel: ObservableObject {
     func createRestorePoint(for environment: WindowsEnvironment) async {
         var operation = StillOperation(kind: .createRestorePoint, environmentID: environment.id)
         do {
-            try await withEnvironmentLease(operation) {
+            try await withStoppedEnvironmentLease(operation) {
                 try operation.transition(to: .running)
                 try await store.saveOperation(operation)
                 latestRestorePoint = try await restorePointService.create(
@@ -787,7 +881,7 @@ final class AppModel: ObservableObject {
             environmentID: environment.id
         )
         do {
-            try await withEnvironmentLease(operation) {
+            try await withStoppedEnvironmentLease(operation) {
                 try operation.transition(to: .running)
                 try await store.saveOperation(operation)
                 _ = try await restorePointService.restore(
@@ -825,7 +919,7 @@ final class AppModel: ObservableObject {
         guard environment.pinnedEngineBuildID != engine.id else { return }
 
         do {
-            try await withEnvironmentLease(StillOperation(
+            try await withStoppedEnvironmentLease(StillOperation(
                 kind: .changeEngine,
                 environmentID: environment.id
             )) {
@@ -855,7 +949,7 @@ final class AppModel: ObservableObject {
     func duplicate(_ environment: WindowsEnvironment) async {
         var operation = StillOperation(kind: .duplicateEnvironment, environmentID: environment.id)
         do {
-            try await withEnvironmentLease(operation) {
+            try await withStoppedEnvironmentLease(operation) {
                 try operation.transition(to: .running)
                 try await store.saveOperation(operation)
                 let duplicate = try recoveryService.duplicate(
@@ -916,7 +1010,7 @@ final class AppModel: ObservableObject {
     ) async {
         var operation = StillOperation(kind: .backup, environmentID: environment.id)
         do {
-            try await withEnvironmentLease(operation) {
+            try await withStoppedEnvironmentLease(operation) {
                 try operation.transition(to: .running)
                 try await store.saveOperation(operation)
                 let document = try await store.load()
@@ -993,10 +1087,15 @@ final class AppModel: ObservableObject {
     func confirmEnvironmentRemoval() async {
         guard let environment = pendingEnvironmentRemoval else { return }
         do {
-            try await store.deleteEnvironmentRecord(id: environment.id)
-            pendingEnvironmentRemoval = nil
-            await load()
-            activityState = .success("\(environment.name) was removed from Still. Its files were not changed.")
+            try await withStoppedEnvironmentLease(StillOperation(
+                kind: .deleteEnvironment,
+                environmentID: environment.id
+            )) {
+                try await store.deleteEnvironmentRecord(id: environment.id)
+                pendingEnvironmentRemoval = nil
+                await load()
+                activityState = .success("\(environment.name) was removed from Still. Its files were not changed.")
+            }
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -1029,7 +1128,7 @@ final class AppModel: ObservableObject {
                     "The Environment selected for deletion no longer exists."
                 )
             }
-            try await withEnvironmentLease(StillOperation(
+            try await withStoppedEnvironmentLease(StillOperation(
                 kind: .deleteEnvironment,
                 environmentID: environment.id
             )) {
@@ -1063,17 +1162,92 @@ final class AppModel: ObservableObject {
         }
     }
 
+    private func withStoppedEnvironmentLease<T>(
+        _ operation: StillOperation,
+        perform work: () async throws -> T
+    ) async throws -> T {
+        try await withEnvironmentLease(operation) {
+            let processSnapshots = try await Task.detached {
+                try WineRuntimeProbe.runningProcesses()
+            }.value
+            let currentSessions = await supervisor.activeSessions()
+            sessions = currentSessions
+            try WineRuntimeProbe.requireStopped(
+                environmentID: operation.environmentID,
+                environments: environments,
+                processes: processSnapshots,
+                sessions: currentSessions
+            )
+            return try await work()
+        }
+    }
+
+    private func terminateAllWineActivity(force: Bool) async throws {
+        let initialProcesses = try await Task.detached {
+            try WineRuntimeProbe.runningProcesses()
+        }.value
+        let initialLiveIDs = WineRuntimeProbe.liveEnvironmentIDs(
+            in: initialProcesses,
+            environments: environments
+        )
+        let representedEnvironmentIDs = Set(
+            (await supervisor.activeSessions()).compactMap(\.environmentID)
+        )
+        let targetEnvironmentIDs = initialLiveIDs.union(representedEnvironmentIDs)
+        if force {
+            try await supervisor.forceStopAll()
+        } else {
+            try await supervisor.stopAll()
+        }
+        for environmentID in initialLiveIDs.subtracting(representedEnvironmentIDs) {
+            guard let environment = environments.first(where: { $0.id == environmentID }) else {
+                continue
+            }
+            let selectedEngine = try engine(for: environment)
+            let sessionID = UUID()
+            let plan = force
+                ? WineCommandBuilder.forceStopPlan(
+                    sessionID: sessionID,
+                    engine: selectedEngine,
+                    bottle: bottle(from: environment),
+                    logURL: LogLocations.launchLogURL(sessionID: sessionID)
+                )
+                : WineCommandBuilder.stopPlan(
+                    sessionID: sessionID,
+                    engine: selectedEngine,
+                    bottle: bottle(from: environment),
+                    logURL: LogLocations.launchLogURL(sessionID: sessionID)
+                )
+            let exitCode = try await supervisor.runAndWait(plan)
+            guard [0, 1].contains(exitCode) else {
+                throw StillCoreError.processFailed(exitCode)
+            }
+        }
+        let deadline = Date().addingTimeInterval(5)
+        while Date() < deadline {
+            let processes = try await Task.detached {
+                try WineRuntimeProbe.runningProcesses()
+            }.value
+            let remaining = WineRuntimeProbe.liveEnvironmentIDs(
+                in: processes,
+                environments: environments
+            ).intersection(targetEnvironmentIDs)
+            if remaining.isEmpty {
+                liveEnvironmentIDs.subtract(targetEnvironmentIDs)
+                return
+            }
+            try await Task.sleep(for: .milliseconds(200))
+        }
+        throw StillCoreError.terminationFailed(
+            targetEnvironmentIDs.map { "Environment \($0) is still running." }
+        )
+    }
+
     private func reconcileLiveWineSessions() async {
         do {
             let processSnapshots = try await Task.detached {
                 try WineRuntimeProbe.runningProcesses()
             }.value
-            for processIdentifier in WineRuntimeProbe.orphanedMonitorProcessIdentifiers(
-                in: processSnapshots,
-                environments: environments
-            ) {
-                Darwin.kill(processIdentifier, SIGTERM)
-            }
             liveEnvironmentIDs = WineRuntimeProbe.liveEnvironmentIDs(
                 in: processSnapshots,
                 environments: environments
@@ -1084,10 +1258,22 @@ final class AppModel: ObservableObject {
                 applications: applications,
                 launchEntries: launchEntries
             )
+            let validationSnapshots = try await Task.detached {
+                try WineRuntimeProbe.runningProcesses()
+            }.value
+            let validatedObservations = observations.filter { observation in
+                guard let environment = environments.first(where: {
+                    $0.id == observation.environmentID
+                }) else { return false }
+                return validationSnapshots.contains {
+                    observation.processIdentity.matches($0)
+                        && WineRuntimeProbe.belongs($0, to: environment)
+                }
+            }
             let activeApplicationIDs = Set(
                 (await supervisor.activeSessions()).compactMap(\.applicationID)
             )
-            for observation in observations
+            for observation in validatedObservations
             where !activeApplicationIDs.contains(observation.applicationID) {
                 guard let application = applications.first(where: {
                     $0.id == observation.applicationID
@@ -1117,13 +1303,38 @@ final class AppModel: ObservableObject {
                 _ = try await supervisor.adopt(
                     plan,
                     observedProcessIdentifier: observation.processIdentifier,
-                    observedProcessName: observation.processName
+                    observedProcessName: observation.processName,
+                    observedProcessStartedAt: observation.processIdentity.startedAt
                 )
             }
+            await supervisor.reconcileApplications(validatedObservations)
             sessions = await supervisor.activeSessions()
         } catch {
-            liveEnvironmentIDs = []
+            sessions = await supervisor.activeSessions()
         }
+    }
+
+    private func waitForApplicationObservation(
+        application: LibraryApplication,
+        environment: WindowsEnvironment,
+        timeout: TimeInterval
+    ) async throws -> LiveWineApplicationObservation {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            let processSnapshots = try await Task.detached {
+                try WineRuntimeProbe.runningProcesses()
+            }.value
+            if let observation = WineRuntimeProbe.observeApplications(
+                in: processSnapshots,
+                environments: [environment],
+                applications: [application],
+                launchEntries: launchEntries.filter { $0.applicationID == application.id }
+            ).first {
+                return observation
+            }
+            try await Task.sleep(for: .milliseconds(500))
+        }
+        throw StillCoreError.launchReadinessTimedOut(application.name)
     }
 
     private func openRunningApplication(_ application: LibraryApplication) async {
@@ -1143,7 +1354,10 @@ final class AppModel: ObservableObject {
                 launchNotice = "\(application.name) is running in the background."
                 return
             }
-            runningApplication.activate(options: [.activateAllWindows])
+            guard runningApplication.activate(options: [.activateAllWindows]) else {
+                launchNotice = "\(application.name) is running, but macOS did not activate its window."
+                return
+            }
             activityState = .success("\(application.name) opened.")
         } catch {
             launchNotice = "\(application.name) is running, but its window could not be focused."
@@ -1152,13 +1366,25 @@ final class AppModel: ObservableObject {
 
     private func schedulePerformanceSampling(
         applicationID: LibraryApplication.ID,
+        sessionID: LaunchSession.ID,
         operationID: StillOperation.ID,
         launchRequestedAt: Date
     ) {
-        Task { [weak self] in
-            for delay in [2, 8, 20, 30] {
-                try? await Task.sleep(for: .seconds(delay))
-                guard let self else { return }
+        performanceSamplingTasks.removeValue(forKey: applicationID)?.cancel()
+        performanceSamplingTasks[applicationID] = Task { [weak self] in
+            var elapsed = 0
+            for deadline in [2, 8, 20, 30] {
+                let delay = deadline - elapsed
+                do {
+                    try await Task.sleep(for: .seconds(delay))
+                } catch {
+                    return
+                }
+                elapsed = deadline
+                guard let self,
+                      await self.supervisor.session(id: sessionID)?.state == .running else {
+                    return
+                }
                 if await self.capturePerformance(
                     applicationID: applicationID,
                     operationID: operationID,
@@ -1211,9 +1437,6 @@ final class AppModel: ObservableObject {
     }
 
     private func launchFailureMessage(_ error: Error, applicationName: String) -> String {
-        if case StillCoreError.processFailed(2) = error {
-            return "\(applicationName) did not accept another launch. Refresh its status or stop the existing Wine session before retrying."
-        }
         if case StillCoreError.duplicateLaunch = error {
             return "\(applicationName) is already launching or running."
         }

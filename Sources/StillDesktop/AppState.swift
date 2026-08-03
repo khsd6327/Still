@@ -84,12 +84,14 @@ enum ApplicationRuntimeState: Equatable {
     case idle
     case launching
     case running
+    case stopping
 
     var title: String {
         switch self {
         case .idle: "Run"
         case .launching: "Launching…"
         case .running: "Open"
+        case .stopping: "Stopping…"
         }
     }
 
@@ -98,6 +100,7 @@ enum ApplicationRuntimeState: Equatable {
         case .idle: "play.fill"
         case .launching: "hourglass"
         case .running: "macwindow"
+        case .stopping: "stop.circle"
         }
     }
 }

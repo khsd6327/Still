@@ -18,7 +18,8 @@ public enum LaunchSessionState: String, Codable, Sendable {
     fileprivate func canTransition(to next: Self) -> Bool {
         switch (self, next) {
         case (.preparing, .launching), (.preparing, .failed),
-             (.launching, .running), (.launching, .failed),
+             (.launching, .running), (.launching, .stopping),
+             (.launching, .failed),
              (.running, .stopping), (.running, .exited), (.running, .failed),
              (.stopping, .exited), (.stopping, .failed):
             true
@@ -36,6 +37,7 @@ public struct AttributedProcess: Codable, Hashable, Identifiable, Sendable {
     public let environmentID: WindowsEnvironment.ID?
     public let launchSessionID: UUID
     public let isRootProcess: Bool
+    public let processStartedAt: Date?
 
     public init(
         processIdentifier: Int32,
@@ -43,7 +45,8 @@ public struct AttributedProcess: Codable, Hashable, Identifiable, Sendable {
         applicationID: LibraryApplication.ID?,
         environmentID: WindowsEnvironment.ID?,
         launchSessionID: UUID,
-        isRootProcess: Bool = false
+        isRootProcess: Bool = false,
+        processStartedAt: Date? = nil
     ) {
         self.processIdentifier = processIdentifier
         self.name = name
@@ -51,6 +54,7 @@ public struct AttributedProcess: Codable, Hashable, Identifiable, Sendable {
         self.environmentID = environmentID
         self.launchSessionID = launchSessionID
         self.isRootProcess = isRootProcess
+        self.processStartedAt = processStartedAt
     }
 }
 
@@ -62,6 +66,7 @@ public struct LaunchSession: Codable, Hashable, Identifiable, Sendable {
     public let environmentID: WindowsEnvironment.ID?
     public private(set) var state: LaunchSessionState
     public private(set) var rootProcessIdentifier: Int32?
+    public private(set) var rootProcessStartedAt: Date?
     public private(set) var attributedProcesses: [AttributedProcess]
     public let createdAt: Date
     public private(set) var startedAt: Date
@@ -85,6 +90,7 @@ public struct LaunchSession: Codable, Hashable, Identifiable, Sendable {
         self.environmentID = environmentID
         self.state = state
         self.rootProcessIdentifier = nil
+        self.rootProcessStartedAt = nil
         self.attributedProcesses = []
         self.createdAt = createdAt
         self.startedAt = createdAt
@@ -114,6 +120,7 @@ public struct LaunchSession: Codable, Hashable, Identifiable, Sendable {
         to next: LaunchSessionState,
         at date: Date = .now,
         rootProcessIdentifier: Int32? = nil,
+        rootProcessStartedAt: Date? = nil,
         exitCode: Int32? = nil,
         failureDescription: String? = nil
     ) throws {
@@ -124,6 +131,7 @@ public struct LaunchSession: Codable, Hashable, Identifiable, Sendable {
         if next == .running {
             startedAt = date
             self.rootProcessIdentifier = rootProcessIdentifier
+            self.rootProcessStartedAt = rootProcessStartedAt
         }
         if !next.isActive {
             finishedAt = date

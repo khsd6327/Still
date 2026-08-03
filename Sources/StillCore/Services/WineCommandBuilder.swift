@@ -12,6 +12,9 @@ public enum WineCommandBuilder {
             engine: engine,
             overrides: request.environment
         )
+        var monitorEnvironment = environment
+        monitorEnvironment["STILL_MONITOR_TOKEN"] = sessionID.uuidString
+        monitorEnvironment["STILL_MONITOR_PREFIX"] = request.bottle.prefixURL.standardizedFileURL.path
         return ProcessPlan(
             sessionID: sessionID,
             applicationID: request.applicationID,
@@ -28,11 +31,6 @@ public enum WineCommandBuilder {
             logURL: logURL,
             terminationPlan: ProcessTerminationPlan(
                 scopeIdentifier: request.bottle.prefixURL.standardizedFileURL.path,
-                hostProcessPathPrefix: windowsDirectoryPrefix(
-                    request.workingDirectoryURL
-                        ?? request.executableURL.deletingLastPathComponent(),
-                    bottle: request.bottle
-                ),
                 gracefulExecutableURL: engine.wineBinaryURL,
                 gracefulArguments: ["wineboot", "--end-session"],
                 forceExecutableURL: engine.wineBinaryURL
@@ -44,7 +42,7 @@ public enum WineCommandBuilder {
                     .appending(path: "wineserver"),
                 monitorPrepareArguments: ["-p5"],
                 monitorArguments: ["-w"],
-                environment: environment,
+                environment: monitorEnvironment,
                 workingDirectoryURL: request.bottle.prefixURL
             ),
             runtimeEvidence: request.runtimeEvidence
