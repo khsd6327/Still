@@ -110,6 +110,67 @@ final class StillStoreMigrationTests: XCTestCase {
         )
     }
 
+    func testRejectsTwoEnvironmentsWithTheSameCanonicalPrefix() async throws {
+        let root = temporaryRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let prefix = root.appending(path: "Prefix")
+        let store = JSONStillStore(rootURL: root)
+        try await store.saveEnvironment(
+            WindowsEnvironment(name: "First", prefixURL: prefix)
+        )
+
+        do {
+            try await store.saveEnvironment(
+                WindowsEnvironment(
+                    name: "Second",
+                    prefixURL: prefix.appending(path: "..", directoryHint: .isDirectory)
+                        .appending(path: "Prefix")
+                )
+            )
+            XCTFail("Expected duplicate canonical prefix rejection")
+        } catch let error as StillCoreError {
+            guard case .invalidStore(let reason) = error else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+            XCTAssertTrue(reason.contains("canonical Environment prefix"))
+        }
+    }
+
+    func testRemovingApplicationAlsoRemovesItsOperations() async throws {
+        let root = temporaryRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let environment = WindowsEnvironment(
+            name: "Test",
+            prefixURL: root.appending(path: "Prefix")
+        )
+        let applicationID = UUID()
+        let entry = LaunchEntry(
+            applicationID: applicationID,
+            executableURL: environment.prefixURL.appending(path: "drive_c/App/app.exe")
+        )
+        let application = LibraryApplication(
+            id: applicationID,
+            environmentID: environment.id,
+            name: "App",
+            launchEntryIDs: [entry.id]
+        )
+        let store = JSONStillStore(rootURL: root)
+        try await store.saveEnvironment(environment)
+        try await store.saveApplication(application, launchEntries: [entry])
+        try await store.saveOperation(StillOperation(
+            kind: .launchApplication,
+            environmentID: environment.id,
+            applicationID: applicationID
+        ))
+
+        try await store.removeApplicationFromLibrary(id: applicationID)
+        let document = try await store.load()
+
+        XCTAssertTrue(document.applications.isEmpty)
+        XCTAssertTrue(document.launchEntries.isEmpty)
+        XCTAssertTrue(document.operations.isEmpty)
+    }
+
     func testUnsupportedLegacySchemaDoesNotCreateNewStore() async throws {
         let root = temporaryRoot()
         defer { try? FileManager.default.removeItem(at: root) }

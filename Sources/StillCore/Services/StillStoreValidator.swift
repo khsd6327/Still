@@ -10,6 +10,12 @@ public struct StillStoreValidator: Sendable {
         try requireUnique(document.engineBuilds.map(\.id), label: "Engine Build")
         try requireUnique(document.components.map(\.id), label: "Component")
         try requireUnique(document.operations.map(\.id), label: "Operation")
+        try requireUnique(
+            document.environments.map {
+                $0.prefixURL.standardizedFileURL.resolvingSymlinksInPath().path
+            },
+            label: "canonical Environment prefix"
+        )
 
         let environmentIDs = Set(document.environments.map(\.id))
         let applicationIDs = Set(document.applications.map(\.id))
