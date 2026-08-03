@@ -36,7 +36,7 @@ struct StillCommands: Commands {
                 Task { await model.stopAllNormally() }
             }
             .keyboardShortcut("k", modifiers: [.command, .option, .shift])
-            .disabled(model.sessions.isEmpty)
+            .disabled(!model.hasLiveWineActivity)
 
             Divider()
 
@@ -50,7 +50,7 @@ struct StillCommands: Commands {
                 model.requestForceStopAll()
             }
             .keyboardShortcut("k", modifiers: [.command, .option, .control, .shift])
-            .disabled(model.sessions.isEmpty)
+            .disabled(!model.hasLiveWineActivity)
         }
     }
 
@@ -61,7 +61,7 @@ struct StillCommands: Commands {
 
     private var primaryActionDisabled: Bool {
         guard let application = model.selectedApplication else { return true }
-        if model.runtimeState(for: application) == .launching { return true }
+        if [.launching, .stopping].contains(model.runtimeState(for: application)) { return true }
         return application.providerManagedState != nil
             && application.providerManagedState != .installed
             && model.runtimeState(for: application) == .idle

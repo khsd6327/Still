@@ -26,15 +26,23 @@ struct ApplicationInspector: View {
                     }
                     let runtimeState = model.runtimeState(for: application)
                     Button(runtimeState.title, systemImage: runtimeState.systemImage) {
-                        Task { await model.performPrimaryApplicationAction() }
+                        Task { await model.performPrimaryApplicationAction(applicationID: application.id) }
                     }
                     .buttonStyle(.borderedProminent)
                     .disabled(
-                        runtimeState == .launching
+                        runtimeState == .launching || runtimeState == .stopping
                             || (runtimeState == .idle
                                 && application.providerManagedState != nil
                                 && application.providerManagedState != .installed)
                     )
+                    if runtimeState == .running {
+                        Button("Request Stop", systemImage: "stop.fill") {
+                            Task { await model.stopApplicationNormally(applicationID: application.id) }
+                        }
+                        Button("Force Stop", systemImage: "exclamationmark.octagon", role: .destructive) {
+                            model.requestForceStop(applicationID: application.id)
+                        }
+                    }
                     Button(
                         application.isFavorite ? "Remove from Favorites" : "Add to Favorites",
                         systemImage: application.isFavorite ? "star.slash" : "star"

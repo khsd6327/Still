@@ -110,10 +110,10 @@ struct AppContainer: View {
                 if let application = model.selectedApplication {
                     let runtimeState = model.runtimeState(for: application)
                     Button(runtimeState.title, systemImage: runtimeState.systemImage) {
-                        Task { await model.performPrimaryApplicationAction() }
+                        Task { await model.performPrimaryApplicationAction(applicationID: application.id) }
                     }
                     .disabled(
-                        runtimeState == .launching
+                        runtimeState == .launching || runtimeState == .stopping
                             || (runtimeState == .idle && !canLaunchSelectedApplication)
                     )
                 }

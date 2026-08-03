@@ -56,19 +56,28 @@ struct LibraryView: View {
                     .buttonStyle(.plain)
                     .simultaneousGesture(TapGesture(count: 2).onEnded {
                         model.selectedApplicationID = application.id
-                        Task { await model.performPrimaryApplicationAction() }
+                        Task { await model.performPrimaryApplicationAction(applicationID: application.id) }
                     })
                     .accessibilityLabel(application.name)
                     .accessibilityValue(accessibilityValue(application))
-                    .accessibilityHint("Selects the application. Use Command Return to run it.")
-                    .accessibilityAction(named: "Run") {
+                    .accessibilityHint("Selects the application. Use Command Return for its primary action.")
+                    .accessibilityAction(named: model.runtimeState(for: application).title) {
                         model.selectedApplicationID = application.id
-                        Task { await model.performPrimaryApplicationAction() }
+                        Task { await model.performPrimaryApplicationAction(applicationID: application.id) }
                     }
                     .contextMenu {
                         Button(model.runtimeState(for: application).title) {
                             model.selectedApplicationID = application.id
-                            Task { await model.performPrimaryApplicationAction() }
+                            Task { await model.performPrimaryApplicationAction(applicationID: application.id) }
+                        }
+                        if model.runtimeState(for: application) == .running {
+                            Divider()
+                            Button("Request Stop") {
+                                Task { await model.stopApplicationNormally(applicationID: application.id) }
+                            }
+                            Button("Force Stop", role: .destructive) {
+                                model.requestForceStop(applicationID: application.id)
+                            }
                         }
                         Button(application.isFavorite ? "Remove from Favorites" : "Add to Favorites") {
                             Task { await model.toggleFavorite(application) }
@@ -106,11 +115,13 @@ struct LibraryView: View {
         .contextMenu(forSelectionType: LibraryApplication.ID.self) { ids in
             Button(primaryActionTitle(for: ids)) {
                 model.selectedApplicationID = ids.first
-                Task { await model.performPrimaryApplicationAction() }
+                let applicationID = ids.first
+                Task { await model.performPrimaryApplicationAction(applicationID: applicationID) }
             }
         } primaryAction: { ids in
             model.selectedApplicationID = ids.first
-            Task { await model.performPrimaryApplicationAction() }
+            let applicationID = ids.first
+            Task { await model.performPrimaryApplicationAction(applicationID: applicationID) }
         }
     }
 
