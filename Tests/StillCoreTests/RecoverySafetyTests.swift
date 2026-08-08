@@ -511,6 +511,41 @@ final class RecoverySafetyTests: XCTestCase {
         )
     }
 
+    func testAdoptManagedCopyPreservesSourceAndEnvironmentIdentity() throws {
+        let root = temporaryRoot("Adopt")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = root.appending(path: "External")
+        let payload = source.appending(path: "drive_c/Game/game.exe")
+        try write("game", to: payload)
+        let environment = WindowsEnvironment(
+            name: "External",
+            prefixURL: source,
+            pinnedEngineBuildID: "old-engine",
+            ownership: .unknown
+        )
+
+        let adopted = try EnvironmentRecoveryService().adoptManagedCopy(
+            environment,
+            managedRootURL: root.appending(path: "Managed"),
+            engineBuildID: "verified-engine",
+            activeSessions: []
+        )
+
+        XCTAssertEqual(adopted.id, environment.id)
+        XCTAssertEqual(adopted.ownership, .managed)
+        XCTAssertNotNil(adopted.managementNonce)
+        XCTAssertEqual(adopted.pinnedEngineBuildID, "verified-engine")
+        XCTAssertEqual(adopted.provisionedEngineBuildID, "verified-engine")
+        XCTAssertEqual(try String(contentsOf: payload, encoding: .utf8), "game")
+        XCTAssertEqual(
+            try String(
+                contentsOf: adopted.prefixURL.appending(path: "drive_c/Game/game.exe"),
+                encoding: .utf8
+            ),
+            "game"
+        )
+    }
+
     func testRepairInspectsBeforeApplyingAndRequiresRestorePoint() throws {
         let root = temporaryRoot("Repair")
         defer { try? FileManager.default.removeItem(at: root) }

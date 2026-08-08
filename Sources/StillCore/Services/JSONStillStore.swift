@@ -310,6 +310,44 @@ public actor JSONStillStore {
         try save(document)
     }
 
+    public func markEnvironmentExternalReadOnly(
+        id: WindowsEnvironment.ID,
+        expectedPrefixURL: URL,
+        activeSessions: [LaunchSession],
+        userApproved: Bool
+    ) throws {
+        var document = try load()
+        guard let index = document.environments.firstIndex(where: { $0.id == id }) else {
+            throw StillCoreError.invalidStore("Environment '\(id)' was not found.")
+        }
+        let current = document.environments[index]
+        guard current.prefixURL.standardizedFileURL.path
+            == expectedPrefixURL.standardizedFileURL.path else {
+            throw StillCoreError.invalidStore(
+                "The Environment path changed before its ownership was classified."
+            )
+        }
+        guard current.ownership != .managed else {
+            throw StillCoreError.invalidStore(
+                "A managed Environment cannot be marked external."
+            )
+        }
+        guard !activeSessions.contains(where: {
+            $0.environmentID == id && $0.state.isActive
+        }) else {
+            throw StillCoreError.environmentMustBeStopped(id)
+        }
+        guard userApproved else {
+            throw StillCoreError.invalidStore(
+                "Explicit approval is required to mark an Environment external."
+            )
+        }
+        document.environments[index].ownership = .externalReadOnly
+        document.environments[index].managementNonce = nil
+        document.environments[index].updatedAt = .now
+        try save(document)
+    }
+
     public func deleteEnvironmentRecord(id: WindowsEnvironment.ID) throws {
         var document = try load()
         removeEnvironmentRecord(id: id, from: &document)

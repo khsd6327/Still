@@ -87,6 +87,8 @@ final class AppModel: ObservableObject {
     @Published var showsDeveloperDisableAudit = false
     @Published var deletionPreview: EnvironmentDeletionPreview?
     @Published var pendingEnvironmentRemoval: WindowsEnvironment?
+    @Published var pendingEnvironmentAdoption: WindowsEnvironment?
+    @Published var pendingExternalClassification: WindowsEnvironment?
     @Published var selectedDeletionMethod: EnvironmentDeletionMethod {
         didSet { UserDefaults.standard.set(selectedDeletionMethod.rawValue, forKey: "environmentDeletionMethod") }
     }
@@ -350,18 +352,41 @@ final class AppModel: ObservableObject {
         guard panel.runModal() == .OK, let prefixURL = panel.url else { return }
         installState = .loading
         do {
-            let environment = WindowsEnvironment(
+            guard let engine = installedEngines.first else {
+                throw StillCoreError.noInstalledEngine
+            }
+            let source = WindowsEnvironment(
                 name: prefixURL.lastPathComponent,
                 prefixURL: prefixURL,
-                pinnedEngineBuildID: installedEngines.first?.id,
-                provisionedEngineBuildID: installedEngines.first?.id,
                 ownership: .importedInPlace
             )
-            try await store.saveEnvironment(environment)
+            let managedRootURL = ownershipService.managedRootURL
+            let currentSessions = sessions
+            let environment = try await Task.detached {
+                try EnvironmentRecoveryService().adoptManagedCopy(
+                    source,
+                    managedRootURL: managedRootURL,
+                    engineBuildID: engine.id,
+                    activeSessions: currentSessions
+                )
+            }.value
+            do {
+                let document = try await store.load()
+                try ownershipService.writeMarker(
+                    for: environment,
+                    storeIdentifier: document.storeIdentifier
+                )
+                try await store.saveEnvironment(environment)
+            } catch {
+                if FileManager.default.fileExists(atPath: environment.prefixURL.path) {
+                    try? FileManager.default.removeItem(at: environment.prefixURL)
+                }
+                throw error
+            }
             await load()
             selectedEnvironmentID = environment.id
             destination = .environments
-            installState = .success("Environment imported without moving its files.")
+            installState = .success("Environment copied into Still. The source was left unchanged.")
         } catch {
             installState = .failure(error.localizedDescription)
             errorMessage = error.localizedDescription
@@ -1094,6 +1119,114 @@ final class AppModel: ObservableObject {
 
     func requestEnvironmentRemoval(_ environment: WindowsEnvironment) {
         pendingEnvironmentRemoval = environment
+    }
+
+    func requestEnvironmentAdoption(_ environment: WindowsEnvironment) {
+        pendingEnvironmentAdoption = environment
+    }
+
+    func requestExternalClassification(_ environment: WindowsEnvironment) {
+        pendingExternalClassification = environment
+    }
+
+    func confirmEnvironmentAdoption() async {
+        guard let environment = pendingEnvironmentAdoption else { return }
+        var operation = StillOperation(
+            kind: .importEnvironment,
+            environmentID: environment.id
+        )
+        do {
+            let engine = installedEngines.first(where: {
+                $0.id == environment.pinnedEngineBuildID
+            }) ?? installedEngines.first
+            guard let engine else { throw StillCoreError.noInstalledEngine }
+            try await withStoppedEnvironmentLease(operation) {
+                try operation.transition(to: .running)
+                try await store.saveOperation(operation)
+                let managedRootURL = ownershipService.managedRootURL
+                let currentSessions = sessions
+                let replacement = try await Task.detached {
+                    try EnvironmentRecoveryService().adoptManagedCopy(
+                        environment,
+                        managedRootURL: managedRootURL,
+                        engineBuildID: engine.id,
+                        activeSessions: currentSessions
+                    )
+                }.value
+                do {
+                    let document = try await store.load()
+                    try ownershipService.writeMarker(
+                        for: replacement,
+                        storeIdentifier: document.storeIdentifier
+                    )
+                    try await store.commitManagedRuntimeReplacement(
+                        environment: replacement,
+                        expectedSourcePrefixURL: environment.prefixURL,
+                        activeSessions: sessions,
+                        userApproved: true,
+                        sourcePrefixRetained: true
+                    )
+                } catch {
+                    if FileManager.default.fileExists(atPath: replacement.prefixURL.path) {
+                        try? FileManager.default.removeItem(at: replacement.prefixURL)
+                    }
+                    throw error
+                }
+                operation.appendEvent("The source Environment was copied into Still-managed storage.")
+                try operation.transition(to: .succeeded, resultSummary: "Environment adopted")
+                try await store.saveOperation(operation)
+                pendingEnvironmentAdoption = nil
+                await load()
+                selectedEnvironmentID = environment.id
+            }
+        } catch {
+            if operation.state == .running {
+                try? operation.transition(
+                    to: .failed,
+                    resultSummary: error.localizedDescription
+                )
+                try? await store.saveOperation(operation)
+            }
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func confirmExternalClassification() async {
+        guard let environment = pendingExternalClassification else { return }
+        var operation = StillOperation(
+            kind: .importEnvironment,
+            environmentID: environment.id
+        )
+        do {
+            try await withStoppedEnvironmentLease(operation) {
+                try operation.transition(to: .running)
+                try await store.saveOperation(operation)
+                try await store.markEnvironmentExternalReadOnly(
+                    id: environment.id,
+                    expectedPrefixURL: environment.prefixURL,
+                    activeSessions: sessions,
+                    userApproved: true
+                )
+                operation.appendEvent("The Environment was marked external and read only.")
+                try operation.transition(
+                    to: .succeeded,
+                    resultSummary: "Environment marked external"
+                )
+                try await store.saveOperation(operation)
+                pendingExternalClassification = nil
+                await load(scanRegisteredEnvironments: false)
+                selectedEnvironmentID = environment.id
+            }
+        } catch {
+            if operation.state == .running {
+                try? operation.transition(
+                    to: .failed,
+                    resultSummary: error.localizedDescription
+                )
+                try? await store.saveOperation(operation)
+            }
+            errorMessage = error.localizedDescription
+        }
     }
 
     func confirmEnvironmentRemoval() async {

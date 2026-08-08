@@ -40,6 +40,42 @@ public struct EnvironmentRecoveryService {
         )
     }
 
+    public func adoptManagedCopy(
+        _ environment: WindowsEnvironment,
+        managedRootURL: URL,
+        engineBuildID: String,
+        activeSessions: [LaunchSession]
+    ) throws -> WindowsEnvironment {
+        try requireStopped(environment.id, sessions: activeSessions)
+        guard environment.ownership != .managed else {
+            throw StillCoreError.invalidStore(
+                "The Environment is already managed by Still."
+            )
+        }
+        let destination = managedRootURL.appending(
+            path: environment.id.uuidString,
+            directoryHint: .isDirectory
+        )
+        guard environment.prefixURL.standardizedFileURL.path
+            != destination.standardizedFileURL.path else {
+            throw StillCoreError.invalidStore(
+                "An unmanaged Environment cannot already use Still's managed path."
+            )
+        }
+        _ = try FileTreeServices.verifiedCopy(
+            from: environment.prefixURL,
+            to: destination
+        )
+        var replacement = environment
+        replacement.prefixURL = destination
+        replacement.pinnedEngineBuildID = engineBuildID
+        replacement.provisionedEngineBuildID = engineBuildID
+        replacement.ownership = .managed
+        replacement.managementNonce = UUID()
+        replacement.updatedAt = .now
+        return replacement
+    }
+
     public func deletionPreview(
         environment: WindowsEnvironment,
         applications: [LibraryApplication]

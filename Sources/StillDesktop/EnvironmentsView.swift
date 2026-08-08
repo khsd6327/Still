@@ -58,6 +58,17 @@ struct EnvironmentsView: View {
                         Button("Export Partial Data…") {
                             backupEnvironment = environment
                         }
+                        if environment.ownership != .managed {
+                            Divider()
+                            Button("Adopt into Still…") {
+                                model.requestEnvironmentAdoption(environment)
+                            }
+                            if environment.ownership != .externalReadOnly {
+                                Button("Mark External, Read Only…") {
+                                    model.requestExternalClassification(environment)
+                                }
+                            }
+                        }
                         Divider()
                         Button("Remove from Still…", role: .destructive) {
                             model.requestEnvironmentRemoval(environment)
@@ -110,6 +121,17 @@ struct EnvironmentsView: View {
                     Button("Export Partial Data…") {
                         backupEnvironment = environment
                     }
+                    if environment.ownership != .managed {
+                        Divider()
+                        Button("Adopt into Still…") {
+                            model.requestEnvironmentAdoption(environment)
+                        }
+                        if environment.ownership != .externalReadOnly {
+                            Button("Mark External, Read Only…") {
+                                model.requestExternalClassification(environment)
+                            }
+                        }
+                    }
                     Divider()
                     Button("Remove from Still…", role: .destructive) {
                         model.requestEnvironmentRemoval(environment)
@@ -136,6 +158,36 @@ struct EnvironmentsView: View {
         }
         .sheet(item: $model.deletionPreview) { preview in
             DeletionPreviewView(model: model, preview: preview)
+        }
+        .confirmationDialog(
+            "Adopt \(model.pendingEnvironmentAdoption?.name ?? "Environment") into Still?",
+            isPresented: Binding(
+                get: { model.pendingEnvironmentAdoption != nil },
+                set: { if !$0 { model.pendingEnvironmentAdoption = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Copy and Adopt") {
+                Task { await model.confirmEnvironmentAdoption() }
+            }
+            Button("Cancel", role: .cancel) { model.pendingEnvironmentAdoption = nil }
+        } message: {
+            Text("Still will copy the Environment into managed storage and update its Library entries. The source folder remains unchanged.")
+        }
+        .confirmationDialog(
+            "Mark \(model.pendingExternalClassification?.name ?? "Environment") external?",
+            isPresented: Binding(
+                get: { model.pendingExternalClassification != nil },
+                set: { if !$0 { model.pendingExternalClassification = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Mark External, Read Only") {
+                Task { await model.confirmExternalClassification() }
+            }
+            Button("Cancel", role: .cancel) { model.pendingExternalClassification = nil }
+        } message: {
+            Text("Still will keep the registered path but will not treat its files as Still-managed data. Physical deletion remains unavailable.")
         }
         .confirmationDialog(
             "Remove \(model.pendingEnvironmentRemoval?.name ?? "Environment") from Still?",
