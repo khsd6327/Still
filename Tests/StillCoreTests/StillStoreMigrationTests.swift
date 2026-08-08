@@ -399,6 +399,75 @@ final class StillStoreMigrationTests: XCTestCase {
         XCTAssertGreaterThan(reloaded.revision, staleDocument.revision)
     }
 
+    func testStoreWriterWaitsForCrossProcessFileLock() async throws {
+        let root = temporaryRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = JSONStillStore(rootURL: root)
+        var document = try await store.load()
+        let lockURL = await store.lockURL
+        let readyURL = root.appending(path: "writer-ready")
+        let process = Process()
+        process.executableURL = URL(filePath: "/usr/bin/python3")
+        process.arguments = [
+            "-c",
+            "import fcntl,pathlib,sys,time; f=open(sys.argv[1],'a+'); fcntl.lockf(f,fcntl.LOCK_EX); pathlib.Path(sys.argv[2]).write_text('ready'); time.sleep(0.5); fcntl.lockf(f,fcntl.LOCK_UN)",
+            lockURL.path,
+            readyURL.path
+        ]
+        try process.run()
+        defer {
+            if process.isRunning { process.terminate() }
+        }
+        for _ in 0 ..< 100 where !FileManager.default.fileExists(atPath: readyURL.path) {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertTrue(FileManager.default.fileExists(atPath: readyURL.path))
+
+        document.environments.append(WindowsEnvironment(
+            name: "Cross Process",
+            prefixURL: root.appending(path: "Cross Process")
+        ))
+        let clock = ContinuousClock()
+        let started = clock.now
+        try await store.save(document)
+        let elapsed = started.duration(to: clock.now)
+        process.waitUntilExit()
+
+        XCTAssertEqual(process.terminationStatus, 0)
+        XCTAssertGreaterThanOrEqual(elapsed, .milliseconds(300))
+        let storedNames = try await store.environments().map(\.name)
+        XCTAssertEqual(storedNames, ["Cross Process"])
+    }
+
+    func testMarksLegacyEnvironmentExternalReadOnlyWithoutMovingFiles() async throws {
+        let root = temporaryRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let prefix = root.appending(path: "Legacy")
+        try FileManager.default.createDirectory(at: prefix, withIntermediateDirectories: true)
+        let payload = prefix.appending(path: "system.reg")
+        try Data("registry".utf8).write(to: payload)
+        let store = JSONStillStore(rootURL: root.appending(path: "Store"))
+        let environment = WindowsEnvironment(
+            name: "Legacy",
+            prefixURL: prefix,
+            ownership: .unknown
+        )
+        try await store.saveEnvironment(environment)
+
+        try await store.markEnvironmentExternalReadOnly(
+            id: environment.id,
+            expectedPrefixURL: prefix,
+            activeSessions: [],
+            userApproved: true
+        )
+
+        let storedEnvironment = try await store.environment(id: environment.id)
+        let updated = try XCTUnwrap(storedEnvironment)
+        XCTAssertEqual(updated.ownership, .externalReadOnly)
+        XCTAssertNil(updated.managementNonce)
+        XCTAssertEqual(try Data(contentsOf: payload), Data("registry".utf8))
+    }
+
     func testMissingStoreIdentifierIsPersistedOnLoad() async throws {
         let root = temporaryRoot()
         defer { try? FileManager.default.removeItem(at: root) }
