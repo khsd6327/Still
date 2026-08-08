@@ -76,7 +76,7 @@ public enum StillCoreError: LocalizedError, Equatable {
         case .engineDownloadFailed(let statusCode):
             "The engine download failed with HTTP status \(statusCode)."
         case .noInstalledEngine:
-            "Install and select a Wine engine before creating a bottle."
+            "Install a Wine engine in Settings > Engines before creating an Environment."
         case .invalidValveKeyValue(let reason):
             "Valve metadata could not be parsed. \(reason)"
         case .untrustedInstallerURL(let url):

@@ -88,6 +88,9 @@ struct SettingsView: View {
         } message: {
             Text("Choose whether to keep or reset expert overrides before hiding Developer Mode.")
         }
+        .sheet(item: $model.pendingEngineLicenseManifest) { manifest in
+            EngineLicenseView(model: model, manifest: manifest)
+        }
         .sheet(item: $model.supportBundleDraft) { draft in
             SupportBundlePreviewView(model: model, draft: draft)
         }
@@ -140,13 +143,60 @@ struct SettingsView: View {
     }
 
     private var engines: some View {
-        Section("Installed") {
-            if model.installedEngines.isEmpty {
-                Text("No engines installed.").foregroundStyle(.secondary)
-            } else {
-                ForEach(model.installedEngines) { engine in
-                    LabeledContent(engine.displayName, value: engine.version)
+        Group {
+            Section("Installed") {
+                if model.installedEngines.isEmpty {
+                    Text("No engines installed.").foregroundStyle(.secondary)
+                } else {
+                    ForEach(model.installedEngines) { engine in
+                        LabeledContent(engine.displayName, value: engine.version)
+                    }
                 }
+            }
+            Section("Available") {
+                if model.availableEngineManifests.isEmpty {
+                    Text("All catalog engines are installed.")
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(model.availableEngineManifests) { manifest in
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(manifest.displayName).font(.headline)
+                                    Text(ByteCountFormatter.string(
+                                        fromByteCount: manifest.downloadSize,
+                                        countStyle: .file
+                                    ))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                Button(
+                                    model.installingEngineID == manifest.id
+                                        ? "Installing…"
+                                        : "Install"
+                                ) {
+                                    model.requestEngineInstallation(manifest)
+                                }
+                                .disabled(model.installingEngineID != nil)
+                            }
+                            ForEach(manifest.requirements, id: \.self) { requirement in
+                                Label(requirement, systemImage: "checkmark.circle")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            if manifest.distributionPolicy == .externalLicenseRequired {
+                                Label("Requires separate license review", systemImage: "doc.text")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .padding(.vertical, 4)
+                    }
+                }
+            }
+            Section {
+                FeatureStateView(state: model.engineInstallationState)
             }
         }
     }
@@ -207,5 +257,55 @@ struct SettingsView: View {
             }
             .accessibilityHint("Shows every file and size before export")
         }
+    }
+}
+
+private struct EngineLicenseView: View {
+    @ObservedObject var model: AppModel
+    let manifest: EngineManifest
+    @Environment(\.dismiss) private var dismiss
+    @State private var accepted = false
+
+    var body: some View {
+        Form {
+            Section("Engine") {
+                LabeledContent("Name", value: manifest.displayName)
+                LabeledContent("Version", value: manifest.version)
+                LabeledContent(
+                    "Download",
+                    value: ByteCountFormatter.string(
+                        fromByteCount: manifest.downloadSize,
+                        countStyle: .file
+                    )
+                )
+            }
+            Section("License") {
+                if let licenseURL = manifest.licenseURL {
+                    Link("Review License and Source", destination: licenseURL)
+                }
+                Toggle("I reviewed and accept the engine license", isOn: $accepted)
+                Text("Acceptance is recorded locally for this engine version.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Section {
+                HStack {
+                    Button("Cancel") {
+                        model.cancelLicensedEngineInstallation()
+                        dismiss()
+                    }
+                    Spacer()
+                    Button("Accept and Install") {
+                        model.confirmLicensedEngineInstallation()
+                        dismiss()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(!accepted)
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .frame(width: 560, height: 390)
+        .interactiveDismissDisabled()
     }
 }

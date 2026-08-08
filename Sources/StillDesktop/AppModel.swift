@@ -113,6 +113,9 @@ final class AppModel: ObservableObject {
     @Published var pendingDiscoveryCandidates: [PendingDiscoveryCandidate] = []
     @Published var supportBundleDraft: SupportBundleDraft?
     @Published var supportBundleExportedURL: URL?
+    @Published var engineInstallationState: FeatureLoadState = .idle
+    @Published var installingEngineID: String?
+    @Published var pendingEngineLicenseManifest: EngineManifest?
     private var acceptedEngineLicenseIDs: Set<String> = []
     private var performanceSamplingTasks: [LibraryApplication.ID: Task<Void, Never>] = [:]
     private var backgroundDiscoveryTask: Task<Void, Never>?
@@ -207,6 +210,11 @@ final class AppModel: ObservableObject {
         guard BundledApplicationRecipes.steam.installer?
             .acceptedFileNames.contains(name) == true else { return nil }
         return BundledCompatibilityProfiles.steam
+    }
+
+    var availableEngineManifests: [EngineManifest] {
+        let installedIDs = Set(installedEngines.map(\.id))
+        return BundledEngineCatalog.manifests.filter { !installedIDs.contains($0.id) }
     }
 
     var visibleApplications: [LibraryApplication] {
@@ -391,6 +399,26 @@ final class AppModel: ObservableObject {
             installState = .failure(error.localizedDescription)
             errorMessage = error.localizedDescription
         }
+    }
+
+    func requestEngineInstallation(_ manifest: EngineManifest) {
+        guard installingEngineID == nil else { return }
+        if manifest.distributionPolicy == .externalLicenseRequired,
+           !acceptedEngineLicenseIDs.contains(manifest.id) {
+            pendingEngineLicenseManifest = manifest
+            return
+        }
+        Task { await installEngine(manifest, acceptsExternalLicense: false) }
+    }
+
+    func confirmLicensedEngineInstallation() {
+        guard let manifest = pendingEngineLicenseManifest else { return }
+        pendingEngineLicenseManifest = nil
+        Task { await installEngine(manifest, acceptsExternalLicense: true) }
+    }
+
+    func cancelLicensedEngineInstallation() {
+        pendingEngineLicenseManifest = nil
     }
 
     func runSelectedInstaller() async {
@@ -1304,6 +1332,26 @@ final class AppModel: ObservableObject {
         } catch {
             await environmentOperationCoordinator.finish(operation)
             throw error
+        }
+    }
+
+    private func installEngine(
+        _ manifest: EngineManifest,
+        acceptsExternalLicense: Bool
+    ) async {
+        guard installingEngineID == nil else { return }
+        installingEngineID = manifest.id
+        engineInstallationState = .loading
+        defer { installingEngineID = nil }
+        do {
+            let descriptor = try await engineInstaller.install(
+                manifest,
+                acceptsExternalLicense: acceptsExternalLicense
+            )
+            await load(scanRegisteredEnvironments: false)
+            engineInstallationState = .success("\(descriptor.displayName) installed.")
+        } catch {
+            engineInstallationState = .failure(error.localizedDescription)
         }
     }
 
