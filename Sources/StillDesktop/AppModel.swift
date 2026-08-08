@@ -40,7 +40,10 @@ final class AppModel: ObservableObject {
     )
 
     @Published var destination: SidebarDestination {
-        didSet { UserDefaults.standard.set(destination.rawValue, forKey: "sidebarDestination") }
+        didSet {
+            UserDefaults.standard.set(destination.rawValue, forKey: "sidebarDestination")
+            reconcileVisibleApplicationSelection()
+        }
     }
     @Published var environments: [WindowsEnvironment] = []
     @Published var applications: [LibraryApplication] = []
@@ -57,7 +60,9 @@ final class AppModel: ObservableObject {
     @Published var selectedEnvironmentID: WindowsEnvironment.ID? {
         didSet { persist(selectedEnvironmentID, key: "selectedEnvironmentID") }
     }
-    @Published var searchText = ""
+    @Published var searchText = "" {
+        didSet { reconcileVisibleApplicationSelection() }
+    }
     @Published var presentation: LibraryPresentation {
         didSet { UserDefaults.standard.set(presentation.rawValue, forKey: "libraryPresentation") }
     }
@@ -255,9 +260,7 @@ final class AppModel: ObservableObject {
             try await store.synchronizeInstalledEngineBuilds(installedBuilds)
             document = try await store.load()
             environments = document.environments
-            if !applications.contains(where: { $0.id == selectedApplicationID }) {
-                selectedApplicationID = applications.first?.id
-            }
+            reconcileVisibleApplicationSelection()
             if !environments.contains(where: { $0.id == selectedEnvironmentID }) {
                 selectedEnvironmentID = environments.first?.id
             }
@@ -719,6 +722,7 @@ final class AppModel: ObservableObject {
                 performanceSamplingTasks.removeValue(forKey: applicationID)?.cancel()
             }
             try await supervisor.stop(sessionID: session.id)
+            try await waitForApplicationSessionExit(applicationID: applicationID)
             await refreshActivity()
         } catch { errorMessage = error.localizedDescription }
     }
@@ -764,7 +768,11 @@ final class AppModel: ObservableObject {
         do {
             switch pendingForceTermination {
             case .selected(let id, _):
+                let applicationID = sessions.first(where: { $0.id == id })?.applicationID
                 try await supervisor.forceStop(sessionID: id)
+                if let applicationID {
+                    try await waitForApplicationSessionExit(applicationID: applicationID)
+                }
             case .all:
                 try await terminateAllWineActivity(force: true)
             }
@@ -1414,6 +1422,31 @@ final class AppModel: ObservableObject {
             return
         }
         dismissLaunchNotice()
+    }
+
+    func reconcileVisibleApplicationSelection() {
+        guard destination.isLibrary else { return }
+        let visible = visibleApplications
+        guard !visible.contains(where: { $0.id == selectedApplicationID }) else { return }
+        selectedApplicationID = visible.first?.id
+    }
+
+    private func waitForApplicationSessionExit(
+        applicationID: LibraryApplication.ID,
+        timeout: TimeInterval = 15
+    ) async throws {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            let activeSessions = await supervisor.activeSessions()
+            sessions = activeSessions
+            if !activeSessions.contains(where: { $0.applicationID == applicationID }) {
+                return
+            }
+            try await Task.sleep(for: .milliseconds(250))
+        }
+        throw StillCoreError.terminationFailed([
+            "The application session did not finish after the stop request."
+        ])
     }
 
     private func schedulePerformanceSampling(
