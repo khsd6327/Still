@@ -8,6 +8,7 @@ public struct HostProcessSnapshot: Equatable, Sendable {
     public let elapsedSeconds: TimeInterval
     public let command: String
     public let startedAt: Date?
+    public let workingDirectoryPath: String?
 
     public init(
         processIdentifier: Int32,
@@ -16,7 +17,8 @@ public struct HostProcessSnapshot: Equatable, Sendable {
         cpuPercent: Double,
         elapsedSeconds: TimeInterval,
         command: String,
-        startedAt: Date? = nil
+        startedAt: Date? = nil,
+        workingDirectoryPath: String? = nil
     ) {
         self.processIdentifier = processIdentifier
         self.parentProcessIdentifier = parentProcessIdentifier
@@ -25,6 +27,7 @@ public struct HostProcessSnapshot: Equatable, Sendable {
         self.elapsedSeconds = elapsedSeconds
         self.command = command
         self.startedAt = startedAt
+        self.workingDirectoryPath = workingDirectoryPath
     }
 
     public var identity: HostProcessIdentity {
@@ -57,13 +60,15 @@ public struct LiveWineApplicationObservation: Equatable, Sendable {
     public let processIdentifier: Int32
     public let processName: String
     public let processIdentity: HostProcessIdentity
+    public let relatedProcessIdentities: [HostProcessIdentity]
 
     public init(
         applicationID: LibraryApplication.ID,
         environmentID: WindowsEnvironment.ID,
         processIdentifier: Int32,
         processName: String,
-        processIdentity: HostProcessIdentity? = nil
+        processIdentity: HostProcessIdentity? = nil,
+        relatedProcessIdentities: [HostProcessIdentity] = []
     ) {
         self.applicationID = applicationID
         self.environmentID = environmentID
@@ -73,11 +78,59 @@ public struct LiveWineApplicationObservation: Equatable, Sendable {
             processIdentifier: processIdentifier,
             startedAt: nil
         )
+        self.relatedProcessIdentities = relatedProcessIdentities.isEmpty
+            ? [self.processIdentity]
+            : relatedProcessIdentities
     }
 }
 
+public enum WineProcessAttributionSource: Equatable, Sendable {
+    case exactWinePrefixEnvironment
+    case workingDirectoryFallback
+}
+
 public enum WineRuntimeProbe {
-    public static func runningProcesses() throws -> [HostProcessSnapshot] {
+    public static func runningProcesses(
+        enrichWorkingDirectories: Bool = true
+    ) throws -> [HostProcessSnapshot] {
+        let snapshots = try processSnapshots()
+        guard enrichWorkingDirectories else { return snapshots }
+        let wineProcessIDs = snapshots.compactMap { snapshot -> Int32? in
+            looksLikeWindowsHostProcess(snapshot.command)
+                ? snapshot.processIdentifier
+                : nil
+        }
+        let workingDirectories = (try? currentWorkingDirectories(
+            processIdentifiers: wineProcessIDs
+        )) ?? [:]
+        guard !workingDirectories.isEmpty else { return snapshots }
+        let validationSnapshots = try processSnapshots()
+        let validationByPID = Dictionary(
+            uniqueKeysWithValues: validationSnapshots.map { ($0.processIdentifier, $0) }
+        )
+        return snapshots.map { snapshot in
+            let stableWorkingDirectory: String?
+            if let workingDirectory = workingDirectories[snapshot.processIdentifier],
+               let validation = validationByPID[snapshot.processIdentifier],
+               hasStableIdentity(snapshot, validation) {
+                stableWorkingDirectory = workingDirectory
+            } else {
+                stableWorkingDirectory = nil
+            }
+            return HostProcessSnapshot(
+                processIdentifier: snapshot.processIdentifier,
+                parentProcessIdentifier: snapshot.parentProcessIdentifier,
+                residentMemoryKilobytes: snapshot.residentMemoryKilobytes,
+                cpuPercent: snapshot.cpuPercent,
+                elapsedSeconds: snapshot.elapsedSeconds,
+                command: snapshot.command,
+                startedAt: snapshot.startedAt,
+                workingDirectoryPath: stableWorkingDirectory
+            )
+        }
+    }
+
+    private static func processSnapshots() throws -> [HostProcessSnapshot] {
         let process = Process()
         let pipe = Pipe()
         process.executableURL = URL(filePath: "/bin/ps")
@@ -148,11 +201,73 @@ public enum WineRuntimeProbe {
         _ process: HostProcessSnapshot,
         to environment: WindowsEnvironment
     ) -> Bool {
-        hasEnvironmentValue(
+        attribution(of: process, to: environment) != nil
+    }
+
+    public static func attribution(
+        of process: HostProcessSnapshot,
+        to environment: WindowsEnvironment
+    ) -> WineProcessAttributionSource? {
+        if hasEnvironmentValue(
             "WINEPREFIX",
             value: environment.prefixURL.standardizedFileURL.path,
             in: process.command
-        )
+        ) {
+            return .exactWinePrefixEnvironment
+        }
+        guard let workingDirectoryPath = process.workingDirectoryPath,
+              path(
+            workingDirectoryPath,
+            isWithin: environment.prefixURL.standardizedFileURL.path
+        ) else { return nil }
+        return .workingDirectoryFallback
+    }
+
+    public static func attributedEnvironmentID(
+        for process: HostProcessSnapshot,
+        environments: [WindowsEnvironment]
+    ) -> WindowsEnvironment.ID? {
+        let exactMatches = environments.filter {
+            attribution(of: process, to: $0) == .exactWinePrefixEnvironment
+        }
+        if exactMatches.count == 1 { return exactMatches[0].id }
+        if exactMatches.count > 1 { return nil }
+
+        let workingDirectoryMatches = environments.filter {
+            attribution(of: process, to: $0) == .workingDirectoryFallback
+        }
+        guard let longestPathLength = workingDirectoryMatches
+            .map({ $0.prefixURL.standardizedFileURL.path.count })
+            .max() else { return nil }
+        let longestMatches = workingDirectoryMatches.filter {
+            $0.prefixURL.standardizedFileURL.path.count == longestPathLength
+        }
+        return longestMatches.count == 1 ? longestMatches[0].id : nil
+    }
+
+    static func parseCurrentWorkingDirectories(_ data: Data) -> [Int32: String] {
+        var result: [Int32: String] = [:]
+        var processIdentifier: Int32?
+        var isWorkingDirectory = false
+        for rawField in data.split(separator: 0, omittingEmptySubsequences: true) {
+            let field = rawField.drop(while: { $0 == 10 || $0 == 13 })
+            guard let type = field.first else { continue }
+            let value = field.dropFirst()
+            switch type {
+            case 112: // p
+                processIdentifier = Int32(String(decoding: value, as: UTF8.self))
+                isWorkingDirectory = false
+            case 102: // f
+                isWorkingDirectory = value.elementsEqual("cwd".utf8)
+            case 110: // n
+                if isWorkingDirectory, let processIdentifier {
+                    result[processIdentifier] = String(decoding: value, as: UTF8.self)
+                }
+            default:
+                continue
+            }
+        }
+        return result
     }
 
     public static func orphanedMonitorProcesses(
@@ -183,7 +298,7 @@ public enum WineRuntimeProbe {
     ) -> Set<WindowsEnvironment.ID> {
         Set(environments.compactMap { environment in
             return processes.contains {
-                belongs($0, to: environment)
+                attributedEnvironmentID(for: $0, environments: environments) == environment.id
                     && $0.command.localizedCaseInsensitiveContains("wineserver")
             } ? environment.id : nil
         })
@@ -239,7 +354,10 @@ public enum WineRuntimeProbe {
                 )
             }
             let matches = processes.filter { process in
-                guard belongs(process, to: environment) else { return false }
+                guard attributedEnvironmentID(
+                    for: process,
+                    environments: environments
+                ) == environment.id else { return false }
                 let command = process.command.lowercased()
                 let identifiesApplication = if usesLauncher,
                                                let workingDirectoryPrefix {
@@ -254,12 +372,16 @@ public enum WineRuntimeProbe {
             guard let process = matches.min(by: {
                 $0.processIdentifier < $1.processIdentifier
             }) else { return nil }
+            let identities = matches
+                .map(\.identity)
+                .sorted { $0.processIdentifier < $1.processIdentifier }
             return LiveWineApplicationObservation(
                 applicationID: application.id,
                 environmentID: application.environmentID,
                 processIdentifier: process.processIdentifier,
                 processName: entry.executableURL.lastPathComponent,
-                processIdentity: process.identity
+                processIdentity: process.identity,
+                relatedProcessIdentities: identities
             )
         }
     }
@@ -277,7 +399,10 @@ public enum WineRuntimeProbe {
         )
         let executableName = entry.executableURL.lastPathComponent.lowercased()
         let matches = processes.filter { process in
-            guard belongs(process, to: environment) else { return false }
+            guard attributedEnvironmentID(
+                for: process,
+                environments: [environment]
+            ) == environment.id else { return false }
             if let windowsPrefix,
                process.command.localizedCaseInsensitiveContains(windowsPrefix) {
                 return true
@@ -317,5 +442,51 @@ public enum WineRuntimeProbe {
         let minutes = components.count == 3 ? components[1] : components[0]
         let seconds = components.count == 3 ? components[2] : components[1]
         return days * 86_400 + hours * 3_600 + minutes * 60 + seconds
+    }
+
+    private static func currentWorkingDirectories(
+        processIdentifiers: [Int32]
+    ) throws -> [Int32: String] {
+        guard !processIdentifiers.isEmpty else { return [:] }
+        let process = Process()
+        let pipe = Pipe()
+        process.executableURL = URL(filePath: "/usr/sbin/lsof")
+        process.arguments = [
+            "-a",
+            "-p",
+            processIdentifiers.map(String.init).joined(separator: ","),
+            "-d",
+            "cwd",
+            "-F0pfn",
+            "-w"
+        ]
+        process.standardOutput = pipe
+        process.standardError = FileHandle.nullDevice
+        try process.run()
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        return parseCurrentWorkingDirectories(data)
+    }
+
+    private static func path(_ candidate: String, isWithin root: String) -> Bool {
+        candidate == root || candidate.hasPrefix(root.hasSuffix("/") ? root : root + "/")
+    }
+
+    private static func looksLikeWindowsHostProcess(_ command: String) -> Bool {
+        let lowercased = command.lowercased()
+        guard lowercased.contains(".exe") else { return false }
+        return lowercased.contains("\\") || lowercased.contains("/wine")
+    }
+
+    private static func hasStableIdentity(
+        _ original: HostProcessSnapshot,
+        _ validation: HostProcessSnapshot
+    ) -> Bool {
+        guard original.processIdentifier == validation.processIdentifier,
+              let originalStart = original.startedAt,
+              let validationStart = validation.startedAt else {
+            return false
+        }
+        return abs(originalStart.timeIntervalSince(validationStart)) <= 1
     }
 }

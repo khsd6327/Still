@@ -3,6 +3,60 @@ import XCTest
 @testable import StillCore
 
 final class WineRuntimeProbeTests: XCTestCase {
+    func testExactPrefixEnvironmentWinsOverWorkingDirectoryFallback() {
+        let exactEnvironment = WindowsEnvironment(
+            name: "Exact",
+            prefixURL: URL(filePath: "/tmp/Exact")
+        )
+        let cwdEnvironment = WindowsEnvironment(
+            name: "CWD",
+            prefixURL: URL(filePath: "/tmp/CWD")
+        )
+        let process = HostProcessSnapshot(
+            processIdentifier: 99,
+            residentMemoryKilobytes: 1,
+            cpuPercent: 0,
+            elapsedSeconds: 1,
+            command: "game.exe WINEPREFIX=/tmp/Exact",
+            workingDirectoryPath: "/tmp/CWD/drive_c/Game"
+        )
+
+        XCTAssertEqual(
+            WineRuntimeProbe.attributedEnvironmentID(
+                for: process,
+                environments: [cwdEnvironment, exactEnvironment]
+            ),
+            exactEnvironment.id
+        )
+    }
+
+    func testWorkingDirectoryFallbackSelectsDeepestPrefix() {
+        let parent = WindowsEnvironment(
+            name: "Parent",
+            prefixURL: URL(filePath: "/tmp/Prefixes")
+        )
+        let child = WindowsEnvironment(
+            name: "Child",
+            prefixURL: URL(filePath: "/tmp/Prefixes/Child")
+        )
+        let process = HostProcessSnapshot(
+            processIdentifier: 100,
+            residentMemoryKilobytes: 1,
+            cpuPercent: 0,
+            elapsedSeconds: 1,
+            command: "C:\\Game\\game.exe",
+            workingDirectoryPath: "/tmp/Prefixes/Child/drive_c/Game"
+        )
+
+        XCTAssertEqual(
+            WineRuntimeProbe.attributedEnvironmentID(
+                for: process,
+                environments: [parent, child]
+            ),
+            child.id
+        )
+    }
+
     func testParsesHostMetricsAndElapsedTime() throws {
         let output = """
           120  77  4096  12.5  01:02 C:\\Games\\Sample\\game.exe --play
@@ -235,9 +289,27 @@ final class WineRuntimeProbeTests: XCTestCase {
             elapsedSeconds: 1,
             command: "wineserver -w WINEPREFIX=/tmp/Prefix-Backup HOME=/tmp"
         )
+        let application = HostProcessSnapshot(
+            processIdentifier: 3,
+            residentMemoryKilobytes: 1,
+            cpuPercent: 0,
+            elapsedSeconds: 1,
+            command: "C:\\Games\\game.exe",
+            workingDirectoryPath: "/tmp/Prefix/drive_c/Games"
+        )
+        let backupApplication = HostProcessSnapshot(
+            processIdentifier: 4,
+            residentMemoryKilobytes: 1,
+            cpuPercent: 0,
+            elapsedSeconds: 1,
+            command: "C:\\Games\\game.exe",
+            workingDirectoryPath: "/tmp/Prefix-Backup/drive_c/Games"
+        )
 
         XCTAssertTrue(WineRuntimeProbe.belongs(exact, to: environment))
         XCTAssertFalse(WineRuntimeProbe.belongs(backup, to: environment))
+        XCTAssertTrue(WineRuntimeProbe.belongs(application, to: environment))
+        XCTAssertFalse(WineRuntimeProbe.belongs(backupApplication, to: environment))
         XCTAssertEqual(
             WineRuntimeProbe.liveEnvironmentIDs(
                 in: [backup],
@@ -245,6 +317,80 @@ final class WineRuntimeProbeTests: XCTestCase {
             ),
             []
         )
+    }
+
+    func testParsesWorkingDirectoriesFromNULTerminatedLsofFieldOutput() {
+        let output = Data((
+            "p101\0\nfcwd\0n/tmp/First Prefix/drive_c/Games\0\n"
+                + "p202\0\nfcwd\0n/tmp/Second/drive_c/Program Files\0\n"
+        ).utf8)
+
+        XCTAssertEqual(
+            WineRuntimeProbe.parseCurrentWorkingDirectories(output),
+            [
+                101: "/tmp/First Prefix/drive_c/Games",
+                202: "/tmp/Second/drive_c/Program Files"
+            ]
+        )
+    }
+
+    func testNULTerminatedLsofParserPreservesNewlineInPath() {
+        let output = Data("p101\0\nfcwd\0n/tmp/Prefix/line\nbreak\0\n".utf8)
+
+        XCTAssertEqual(
+            WineRuntimeProbe.parseCurrentWorkingDirectories(output)[101],
+            "/tmp/Prefix/line\nbreak"
+        )
+    }
+
+    func testNULTerminatedLsofParserIgnoresNameWithoutCwdField() {
+        let output = Data("p101\0\nftxt\0n/tmp/not-cwd\0\nfcwd\0\n".utf8)
+
+        XCTAssertTrue(WineRuntimeProbe.parseCurrentWorkingDirectories(output).isEmpty)
+    }
+
+    func testApplicationObservationUsesPrefixScopedWorkingDirectory() {
+        let environment = WindowsEnvironment(
+            name: "Steam",
+            prefixURL: URL(filePath: "/tmp/Steam")
+        )
+        let applicationID = UUID()
+        let entry = LaunchEntry(
+            applicationID: applicationID,
+            executableURL: URL(filePath: "/tmp/Steam/drive_c/Program Files/Steam/steam.exe")
+        )
+        let application = LibraryApplication(
+            id: applicationID,
+            environmentID: environment.id,
+            name: "Steam",
+            launchEntryIDs: [entry.id]
+        )
+        let records = [
+            HostProcessSnapshot(
+                processIdentifier: 10,
+                residentMemoryKilobytes: 1,
+                cpuPercent: 0,
+                elapsedSeconds: 1,
+                command: "wineserver -w WINEPREFIX=/tmp/Steam"
+            ),
+            HostProcessSnapshot(
+                processIdentifier: 20,
+                residentMemoryKilobytes: 1,
+                cpuPercent: 0,
+                elapsedSeconds: 1,
+                command: "C:\\Program Files\\Steam\\steam.exe",
+                workingDirectoryPath: "/tmp/Steam/drive_c/Program Files/Steam"
+            )
+        ]
+
+        let observation = WineRuntimeProbe.observeApplications(
+                in: records,
+                environments: [environment],
+                applications: [application],
+                launchEntries: [entry]
+            ).first
+        XCTAssertEqual(observation?.processIdentifier, 20)
+        XCTAssertEqual(observation?.relatedProcessIdentities.map(\.processIdentifier), [20])
     }
 
     func testApplicationObservationCannotCrossEnvironmentBoundary() {
