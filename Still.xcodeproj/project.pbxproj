@@ -74,6 +74,7 @@
 		9B2289FD2BE0F2DAFFB4A0AC /* TerminationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96288B92CC46337E386A61A0 /* TerminationCoordinator.swift */; };
 		9B858DB6BACAFC6BB59A98E1 /* EnvironmentRecoveryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04C599C356ED1A317486DC30 /* EnvironmentRecoveryService.swift */; };
 		9BAFF870A081C03A518781DE /* ApplicationLifecycle.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF8C2CBC05E8060273FD0B0B /* ApplicationLifecycle.swift */; };
+		9EDFC7A70BE1F8CB3E483846 /* WineWindowActivation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52D7F5657EBC822E75D326FD /* WineWindowActivation.swift */; };
 		A21BAD240D0113486038828E /* Operation.swift in Sources */ = {isa = PBXBuildFile; fileRef = F456F04AE6B84288B81D462A /* Operation.swift */; };
 		A21F2B8B36BAD12BA18F21C4 /* WineRuntimeProbeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B912613595E7B4E6B25A44D /* WineRuntimeProbeTests.swift */; };
 		A4D41498B0C684A7A8C0572F /* Bottle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A2C836863F55F6983DD09A8 /* Bottle.swift */; };
@@ -202,6 +203,7 @@
 		4162777B334F8A680A4A9067 /* ApplicationDiscoveryCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApplicationDiscoveryCoordinatorTests.swift; sourceTree = "<group>"; };
 		47DB75A30DE08EDE8CC26529 /* AppContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppContainer.swift; sourceTree = "<group>"; };
 		4909447EF1E68FA39D43DA8A /* RecoverySafetyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecoverySafetyTests.swift; sourceTree = "<group>"; };
+		52D7F5657EBC822E75D326FD /* WineWindowActivation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WineWindowActivation.swift; sourceTree = "<group>"; };
 		54FB2219A9000B368BAC6BE6 /* LaunchSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchSession.swift; sourceTree = "<group>"; };
 		563C66645802DAD7AD9DA6D1 /* Capability.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Capability.swift; sourceTree = "<group>"; };
 		568DE663644743DD8BE985D3 /* LogRotationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogRotationService.swift; sourceTree = "<group>"; };
@@ -481,6 +483,7 @@
 				79660805A836A3AE804666D8 /* StillCommands.swift */,
 				82E967664122B023E75781E1 /* StillDesktopApp.swift */,
 				E670D1A8D3B1B86BFC47A35A /* SupportBundlePreviewView.swift */,
+				52D7F5657EBC822E75D326FD /* WineWindowActivation.swift */,
 			);
 			path = StillDesktop;
 			sourceTree = "<group>";
@@ -633,6 +636,7 @@
 				AB2F9306B7FD1C03772497C6 /* StillCommands.swift in Sources */,
 				798C245DBFA5A4C62DFF4D3C /* StillDesktopApp.swift in Sources */,
 				ED16D1B4E8994DC43CB6DAA9 /* SupportBundlePreviewView.swift in Sources */,
+				9EDFC7A70BE1F8CB3E483846 /* WineWindowActivation.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -26,6 +26,7 @@ final class AppModel: ObservableObject {
     private let compatibilityResolver = CompatibilityResolver()
     private let profileMatcher = CompatibilityProfileMatcher()
     private let dxmtBridgeValidator = DXMTBridgeValidator()
+    private let windowActivator: WineWindowActivating
     private lazy var deletionCoordinator = EnvironmentDeletionCoordinator(
         store: store,
         ownershipService: ownershipService,
@@ -69,6 +70,7 @@ final class AppModel: ObservableObject {
     @Published var installDraft = InstallDraft()
     @Published var errorMessage: String?
     @Published var launchNotice: String?
+    @Published var pendingWindowControlApplicationID: LibraryApplication.ID?
     @Published var pendingForceTermination: PendingForceTermination?
     @Published var developerModeEnabled: Bool {
         didSet { UserDefaults.standard.set(developerModeEnabled, forKey: "developerModeEnabled") }
@@ -108,7 +110,8 @@ final class AppModel: ObservableObject {
     private var performanceSamplingTasks: [LibraryApplication.ID: Task<Void, Never>] = [:]
     private var backgroundDiscoveryTask: Task<Void, Never>?
 
-    init() {
+    init(windowActivator: WineWindowActivating = WineWindowActivator()) {
+        self.windowActivator = windowActivator
         let defaults = UserDefaults.standard
         let restoredDeveloperMode = defaults.bool(forKey: "developerModeEnabled")
         developerModeEnabled = restoredDeveloperMode
@@ -554,6 +557,7 @@ final class AppModel: ObservableObject {
         }
         launchingApplicationIDs.insert(application.id)
         launchNotice = nil
+        pendingWindowControlApplicationID = nil
         let launchRequestedAt = Date()
         var operation = StillOperation(
             kind: .launchApplication,
@@ -1168,7 +1172,7 @@ final class AppModel: ObservableObject {
     ) async throws -> T {
         try await withEnvironmentLease(operation) {
             let processSnapshots = try await Task.detached {
-                try WineRuntimeProbe.runningProcesses()
+                try WineRuntimeProbe.runningProcesses(enrichWorkingDirectories: false)
             }.value
             let currentSessions = await supervisor.activeSessions()
             sessions = currentSessions
@@ -1184,7 +1188,7 @@ final class AppModel: ObservableObject {
 
     private func terminateAllWineActivity(force: Bool) async throws {
         let initialProcesses = try await Task.detached {
-            try WineRuntimeProbe.runningProcesses()
+            try WineRuntimeProbe.runningProcesses(enrichWorkingDirectories: false)
         }.value
         let initialLiveIDs = WineRuntimeProbe.liveEnvironmentIDs(
             in: initialProcesses,
@@ -1226,7 +1230,7 @@ final class AppModel: ObservableObject {
         let deadline = Date().addingTimeInterval(5)
         while Date() < deadline {
             let processes = try await Task.detached {
-                try WineRuntimeProbe.runningProcesses()
+                try WineRuntimeProbe.runningProcesses(enrichWorkingDirectories: false)
             }.value
             let remaining = WineRuntimeProbe.liveEnvironmentIDs(
                 in: processes,
@@ -1259,15 +1263,11 @@ final class AppModel: ObservableObject {
                 launchEntries: launchEntries
             )
             let validationSnapshots = try await Task.detached {
-                try WineRuntimeProbe.runningProcesses()
+                try WineRuntimeProbe.runningProcesses(enrichWorkingDirectories: false)
             }.value
             let validatedObservations = observations.filter { observation in
-                guard let environment = environments.first(where: {
-                    $0.id == observation.environmentID
-                }) else { return false }
                 return validationSnapshots.contains {
                     observation.processIdentity.matches($0)
-                        && WineRuntimeProbe.belongs($0, to: environment)
                 }
             }
             let activeApplicationIDs = Set(
@@ -1309,6 +1309,10 @@ final class AppModel: ObservableObject {
             }
             await supervisor.reconcileApplications(validatedObservations)
             sessions = await supervisor.activeSessions()
+            reconcileWindowActivationNotice(
+                activeApplicationIDs: Set(validatedObservations.map(\.applicationID))
+                    .union(sessions.compactMap(\.applicationID))
+            )
         } catch {
             sessions = await supervisor.activeSessions()
         }
@@ -1347,21 +1351,69 @@ final class AppModel: ObservableObject {
                 environments: environments,
                 applications: applications,
                 launchEntries: launchEntries
-            ).first(where: { $0.applicationID == application.id }),
-            let runningApplication = NSRunningApplication(
-                processIdentifier: observation.processIdentifier
-            ) else {
+            ).first(where: { $0.applicationID == application.id }) else {
+                pendingWindowControlApplicationID = nil
                 launchNotice = "\(application.name) is running in the background."
                 return
             }
-            guard runningApplication.activate(options: [.activateAllWindows]) else {
+            switch windowActivator.activate(
+                applicationName: application.name,
+                processIdentities: observation.relatedProcessIdentities
+            ) {
+            case .activated:
+                pendingWindowControlApplicationID = nil
+                launchNotice = nil
+                activityState = .success("\(application.name) opened.")
+            case .accessibilityPermissionRequired:
+                pendingWindowControlApplicationID = application.id
+                launchNotice = "Still needs Window Control permission to focus \(application.name)."
+            case .noWindow:
+                pendingWindowControlApplicationID = nil
+                launchNotice = "\(application.name) is running, but its window was not found."
+            case .ambiguousWindow:
+                pendingWindowControlApplicationID = nil
+                launchNotice = "\(application.name) is running, but its window could not be identified safely."
+            case .failed:
+                pendingWindowControlApplicationID = nil
                 launchNotice = "\(application.name) is running, but macOS did not activate its window."
-                return
             }
-            activityState = .success("\(application.name) opened.")
         } catch {
+            pendingWindowControlApplicationID = nil
             launchNotice = "\(application.name) is running, but its window could not be focused."
         }
+    }
+
+    func requestWindowControlPermission() {
+        windowActivator.requestAccessibilityPermission()
+    }
+
+    func retryWindowActivation() async {
+        guard let applicationID = pendingWindowControlApplicationID,
+              let application = applications.first(where: { $0.id == applicationID }) else {
+            dismissLaunchNotice()
+            return
+        }
+        await reconcileLiveWineSessions()
+        guard runtimeState(for: application) == .running else {
+            dismissLaunchNotice()
+            return
+        }
+        await openRunningApplication(application)
+    }
+
+    func dismissLaunchNotice() {
+        launchNotice = nil
+        pendingWindowControlApplicationID = nil
+    }
+
+    func reconcileWindowActivationNotice(
+        activeApplicationIDs: Set<LibraryApplication.ID>
+    ) {
+        guard let applicationID = pendingWindowControlApplicationID,
+              !activeApplicationIDs.contains(applicationID) else {
+            return
+        }
+        dismissLaunchNotice()
     }
 
     private func schedulePerformanceSampling(

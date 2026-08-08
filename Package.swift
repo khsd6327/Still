@@ -30,6 +30,10 @@ let package = Package(
         .testTarget(
             name: "StillCoreTests",
             dependencies: ["StillCore"]
+        ),
+        .testTarget(
+            name: "StillDesktopTests",
+            dependencies: ["StillDesktop", "StillCore"]
         )
     ],
     swiftLanguageModes: [.v6]

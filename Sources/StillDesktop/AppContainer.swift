@@ -35,7 +35,17 @@ struct AppContainer: View {
                         .foregroundStyle(.orange)
                     Text(notice).font(.callout)
                     Spacer()
-                    Button("Dismiss") { model.launchNotice = nil }
+                    if model.pendingWindowControlApplicationID != nil {
+                        Button("Allow Window Control") {
+                            model.requestWindowControlPermission()
+                        }
+                        .buttonStyle(.borderless)
+                        Button("Try Again") {
+                            Task { await model.retryWindowActivation() }
+                        }
+                        .buttonStyle(.borderless)
+                    }
+                    Button("Dismiss") { model.dismissLaunchNotice() }
                         .buttonStyle(.borderless)
                 }
                 .padding(.horizontal, 14)
