@@ -17,7 +17,8 @@ let package = Package(
         .target(name: "StillCore"),
         .executableTarget(
             name: "StillDesktop",
-            dependencies: ["StillCore"]
+            dependencies: ["StillCore"],
+            exclude: ["Assets.xcassets"]
         ),
         .executableTarget(
             name: "StillCLI",
