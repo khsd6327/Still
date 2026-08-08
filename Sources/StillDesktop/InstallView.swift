@@ -20,6 +20,9 @@ struct InstallView: View {
 
                 if let profile = model.matchedInstallerProfile {
                     LabeledContent("Recognized profile", value: profile.displayName)
+                    if let engineName = model.matchedInstallerRequiredEngineName {
+                        LabeledContent("Required engine", value: engineName)
+                    }
                     Text("The selected installer remains user supplied. Still applies only the bundled compatibility defaults and installer arguments.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -39,6 +42,14 @@ struct InstallView: View {
                         ForEach(model.environments) { environment in
                             Text(environment.name).tag(Optional(environment.id))
                         }
+                    }
+                    if !model.selectedInstallEnvironmentMeetsProfile {
+                        Label(
+                            "The selected Environment does not use the engine required by this Profile. Create a new Environment.",
+                            systemImage: "exclamationmark.triangle"
+                        )
+                        .font(.caption)
+                        .foregroundStyle(.orange)
                     }
                 }
                 HStack {
@@ -62,6 +73,7 @@ struct InstallView: View {
                 .disabled(
                     model.installDraft.installerURL == nil
                         || model.installDraft.environmentID == nil
+                        || !model.selectedInstallEnvironmentMeetsProfile
                         || model.installState == .loading
                 )
             } footer: {

@@ -3,6 +3,45 @@ import XCTest
 @testable import StillCore
 
 final class EngineInstallerTests: XCTestCase {
+    func testGenericEnvironmentRecommendationPrefersStableWine() throws {
+        let engines = [
+            descriptor(id: "gptk", name: "Game Porting Toolkit", family: .gamePortingToolkit),
+            descriptor(id: "staging", name: "Wine Staging", family: .wineStaging),
+            descriptor(id: "stable", name: "Wine Stable", family: .wineStable)
+        ]
+
+        XCTAssertEqual(
+            try BundledEngineCatalog.recommendedInstalledEngine(from: engines).id,
+            "stable"
+        )
+    }
+
+    func testProfileRecommendationRequiresExactInstalledEngine() throws {
+        let required = descriptor(id: "verified", name: "Verified", family: .wineStaging)
+        let fallback = descriptor(id: "fallback", name: "Fallback", family: .wineStaging)
+        let profile = CompatibilityProfile(
+            id: "profile",
+            displayName: "Profile",
+            matchRules: [],
+            requiredEngineFamily: .wineStaging,
+            requiredEngineID: required.id
+        )
+
+        XCTAssertEqual(
+            try BundledEngineCatalog.recommendedInstalledEngine(
+                from: [fallback, required],
+                for: profile
+            ).id,
+            required.id
+        )
+        XCTAssertThrowsError(try BundledEngineCatalog.recommendedInstalledEngine(
+            from: [fallback],
+            for: profile
+        )) { error in
+            XCTAssertEqual(error as? StillCoreError, .engineNotFound(required.id))
+        }
+    }
+
     func testBundledCatalogHasPinnedChecksums() {
         XCTAssertEqual(BundledEngineCatalog.manifests.count, 4)
         for manifest in BundledEngineCatalog.manifests {
@@ -272,6 +311,21 @@ final class EngineInstallerTests: XCTestCase {
                 .externalLicenseAcceptanceRequired(manifest.id)
             )
         }
+    }
+
+    private func descriptor(
+        id: String,
+        name: String,
+        family: EngineFamily
+    ) -> EngineDescriptor {
+        EngineDescriptor(
+            id: id,
+            displayName: name,
+            version: "1",
+            family: family,
+            wineBinaryURL: URL(filePath: "/tmp/\(id)/wine"),
+            capabilities: [.win64]
+        )
     }
 
     private func makeArchive(

@@ -217,6 +217,28 @@ final class AppModel: ObservableObject {
         return BundledEngineCatalog.manifests.filter { !installedIDs.contains($0.id) }
     }
 
+    var matchedInstallerRequiredEngineName: String? {
+        guard let requiredID = matchedInstallerProfile?.requiredEngineID else { return nil }
+        return installedEngines.first(where: { $0.id == requiredID })?.displayName ?? requiredID
+    }
+
+    var selectedInstallEnvironmentMeetsProfile: Bool {
+        guard let profile = matchedInstallerProfile else { return true }
+        guard let environmentID = installDraft.environmentID,
+              let environment = environments.first(where: { $0.id == environmentID }) else {
+            return false
+        }
+        if let requiredID = profile.requiredEngineID {
+            return environment.pinnedEngineBuildID == requiredID
+        }
+        if let requiredFamily = profile.requiredEngineFamily,
+           let engineID = environment.pinnedEngineBuildID,
+           let engine = installedEngines.first(where: { $0.id == engineID }) {
+            return engine.family == requiredFamily
+        }
+        return true
+    }
+
     var visibleApplications: [LibraryApplication] {
         applications.filter { application in
             guard !application.isHidden else { return false }
@@ -309,9 +331,10 @@ final class AppModel: ObservableObject {
     func createEnvironment(name: String? = nil) async {
         installState = .loading
         do {
-            guard let engine = installedEngines.first else {
-                throw StillCoreError.noInstalledEngine
-            }
+            let engine = try BundledEngineCatalog.recommendedInstalledEngine(
+                from: installedEngines,
+                for: matchedInstallerProfile
+            )
             let environmentID = UUID()
             let displayName = name?.trimmingCharacters(in: .whitespacesAndNewlines)
             let resolvedName = displayName?.isEmpty == false
@@ -360,9 +383,9 @@ final class AppModel: ObservableObject {
         guard panel.runModal() == .OK, let prefixURL = panel.url else { return }
         installState = .loading
         do {
-            guard let engine = installedEngines.first else {
-                throw StillCoreError.noInstalledEngine
-            }
+            let engine = try BundledEngineCatalog.recommendedInstalledEngine(
+                from: installedEngines
+            )
             let source = WindowsEnvironment(
                 name: prefixURL.lastPathComponent,
                 prefixURL: prefixURL,
@@ -435,6 +458,15 @@ final class AppModel: ObservableObject {
                 var effectiveEnvironment = environment
                 let installerArguments: [String]
                 if let matchedInstallerProfile {
+                    let requiredEngine = try BundledEngineCatalog.recommendedInstalledEngine(
+                        from: installedEngines,
+                        for: matchedInstallerProfile
+                    )
+                    guard effectiveEnvironment.pinnedEngineBuildID == requiredEngine.id else {
+                        throw StillCoreError.engineChangeRequirementsNotMet(
+                            "The selected Profile requires \(requiredEngine.displayName). Create a new Environment for this installer."
+                        )
+                    }
                     effectiveEnvironment.profileID = matchedInstallerProfile.id
                     effectiveEnvironment.updatedAt = .now
                     try await store.saveEnvironment(effectiveEnvironment)

@@ -81,4 +81,46 @@ public enum BundledEngineCatalog {
         }
         return manifest
     }
+
+    public static func recommendedInstalledEngine(
+        from engines: [EngineDescriptor],
+        for profile: CompatibilityProfile? = nil
+    ) throws -> EngineDescriptor {
+        guard !engines.isEmpty else { throw StillCoreError.noInstalledEngine }
+
+        if let requiredEngineID = profile?.requiredEngineID {
+            guard let engine = engines.first(where: { $0.id == requiredEngineID }) else {
+                throw StillCoreError.engineNotFound(requiredEngineID)
+            }
+            return engine
+        }
+
+        if let requiredFamily = profile?.requiredEngineFamily {
+            guard let engine = engines
+                .filter({ $0.family == requiredFamily })
+                .sorted(by: preferredOrder)
+                .first else {
+                throw StillCoreError.engineNotFound(requiredFamily.rawValue)
+            }
+            return engine
+        }
+
+        return engines.sorted(by: preferredOrder)[0]
+    }
+
+    private static func preferredOrder(
+        _ lhs: EngineDescriptor,
+        _ rhs: EngineDescriptor
+    ) -> Bool {
+        let priority: [EngineFamily: Int] = [
+            .wineStable: 0,
+            .wineStaging: 1,
+            .wineDevel: 2,
+            .gamePortingToolkit: 3
+        ]
+        let lhsPriority = lhs.family.flatMap { priority[$0] } ?? 4
+        let rhsPriority = rhs.family.flatMap { priority[$0] } ?? 4
+        if lhsPriority != rhsPriority { return lhsPriority < rhsPriority }
+        return lhs.displayName.localizedStandardCompare(rhs.displayName) == .orderedAscending
+    }
 }
