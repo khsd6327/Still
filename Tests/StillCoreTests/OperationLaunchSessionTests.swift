@@ -472,6 +472,59 @@ final class OperationLaunchSessionTests: XCTestCase {
         try await supervisor.forceStop(sessionID: session.id)
     }
 
+    func testReconcileRejectsReusedProcessIdentifier() async throws {
+        let rootURL = temporaryRoot("PIDReuse")
+        defer { try? FileManager.default.removeItem(at: rootURL) }
+        try FileManager.default.createDirectory(at: rootURL, withIntermediateDirectories: true)
+        let applicationID = UUID()
+        let environmentID = UUID()
+        let startedAt = Date(timeIntervalSince1970: 1_000)
+        let termination = ProcessTerminationPlan(
+            scopeIdentifier: rootURL.path,
+            gracefulExecutableURL: URL(filePath: "/usr/bin/true"),
+            gracefulArguments: [],
+            forceExecutableURL: URL(filePath: "/usr/bin/true"),
+            forceArguments: [],
+            monitorExecutableURL: URL(filePath: "/bin/sleep"),
+            monitorArguments: ["2"],
+            environment: [:],
+            workingDirectoryURL: rootURL,
+            acceptedExitCodes: [0]
+        )
+        let supervisor = ProcessSupervisor()
+        let session = try await supervisor.adopt(
+            ProcessPlan(
+                applicationID: applicationID,
+                environmentID: environmentID,
+                executableURL: URL(filePath: "/usr/bin/true"),
+                arguments: [],
+                logURL: rootURL.appending(path: "pid-reuse.log"),
+                terminationPlan: termination
+            ),
+            observedProcessIdentifier: 321,
+            observedProcessName: "game.exe",
+            observedProcessStartedAt: startedAt
+        )
+
+        await supervisor.reconcileApplications([
+            LiveWineApplicationObservation(
+                applicationID: applicationID,
+                environmentID: environmentID,
+                processIdentifier: 321,
+                processName: "replacement.exe",
+                processIdentity: HostProcessIdentity(
+                    processIdentifier: 321,
+                    startedAt: startedAt.addingTimeInterval(5)
+                )
+            )
+        ])
+
+        let reconciledState = await supervisor.session(id: session.id)?.state
+        XCTAssertEqual(reconciledState, .exited)
+        let activeSessions = await supervisor.activeSessions()
+        XCTAssertTrue(activeSessions.isEmpty)
+    }
+
     private func temporaryRoot(_ name: String) -> URL {
         FileManager.default.temporaryDirectory
             .appending(path: "Still\(name)Tests")
