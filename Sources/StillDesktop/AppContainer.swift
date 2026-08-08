@@ -26,7 +26,7 @@ struct AppContainer: View {
             prompt: "Search Library"
         )
         .toolbar { toolbar }
-        .background(WindowCloseGuard(model: model))
+        .background(WindowCloseGuard())
         .task { await model.load() }
         .safeAreaInset(edge: .top) {
             if let notice = model.launchNotice {

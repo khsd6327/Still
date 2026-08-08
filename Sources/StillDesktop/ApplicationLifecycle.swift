@@ -1,39 +1,102 @@
 import AppKit
 import SwiftUI
 
-@MainActor
-final class StillApplicationDelegate: NSObject, NSApplicationDelegate {
-    weak var model: AppModel?
+enum ApplicationTerminationAction: Equatable {
+    case terminateNow
+    case requestNormalStop
+    case ask
+}
 
-    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        guard let model, model.hasLiveWineActivity else { return .terminateNow }
+enum ApplicationTerminationPolicy {
+    static func action(
+        hasLiveWineActivity: Bool,
+        closeRunningBehavior: CloseRunningBehavior
+    ) -> ApplicationTerminationAction {
+        guard hasLiveWineActivity else { return .terminateNow }
 
-        let alert = NSAlert()
-        alert.messageText = "Windows applications are still running."
-        alert.informativeText = "Choose whether to leave them running, stop them normally, or cancel quitting Still."
-        alert.addButton(withTitle: "Leave Running and Quit")
-        alert.addButton(withTitle: "Request Stop and Quit")
-        alert.addButton(withTitle: "Cancel")
-        switch alert.runModal() {
-        case .alertFirstButtonReturn:
+        switch closeRunningBehavior {
+        case .ask:
+            return .ask
+        case .stopAndClose:
+            return .requestNormalStop
+        case .leaveRunning:
             return .terminateNow
-        case .alertSecondButtonReturn:
-            Task {
-                let stopped = await model.stopAllNormally()
-                sender.reply(toApplicationShouldTerminate: stopped)
-            }
-            return .terminateLater
-        default:
-            return .terminateCancel
         }
     }
 }
 
-struct WindowCloseGuard: NSViewRepresentable {
-    let model: AppModel
+@MainActor
+final class StillApplicationDelegate: NSObject, NSApplicationDelegate {
+    weak var model: AppModel?
+    private var isStoppingBeforeTermination = false
 
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard let model else { return .terminateNow }
+
+        switch ApplicationTerminationPolicy.action(
+            hasLiveWineActivity: model.hasLiveWineActivity,
+            closeRunningBehavior: model.closeRunningBehavior
+        ) {
+        case .terminateNow:
+            return .terminateNow
+        case .requestNormalStop:
+            return requestNormalStopBeforeTermination(sender, model: model)
+        case .ask:
+            return presentTerminationChoice(sender, model: model)
+        }
+    }
+
+    private func presentTerminationChoice(
+        _ sender: NSApplication,
+        model: AppModel
+    ) -> NSApplication.TerminateReply {
+        let alert = NSAlert()
+        alert.messageText = "Windows applications are still running."
+        alert.informativeText = "Choose whether to leave them running, stop them normally, or cancel quitting Still."
+        alert.addButton(withTitle: "Request Stop and Quit")
+        alert.addButton(withTitle: "Leave Running and Quit")
+        alert.addButton(withTitle: "Cancel")
+        let remember = NSButton(
+            checkboxWithTitle: "Remember This Choice",
+            target: nil,
+            action: nil
+        )
+        alert.accessoryView = remember
+
+        switch alert.runModal() {
+        case .alertFirstButtonReturn:
+            if remember.state == .on {
+                model.closeRunningBehavior = .stopAndClose
+            }
+            return requestNormalStopBeforeTermination(sender, model: model)
+        case .alertSecondButtonReturn:
+            if remember.state == .on {
+                model.closeRunningBehavior = .leaveRunning
+            }
+            return .terminateNow
+        default:
+            return .terminateCancel
+        }
+    }
+
+    private func requestNormalStopBeforeTermination(
+        _ sender: NSApplication,
+        model: AppModel
+    ) -> NSApplication.TerminateReply {
+        guard !isStoppingBeforeTermination else { return .terminateLater }
+        isStoppingBeforeTermination = true
+        Task { [weak self] in
+            let stopped = await model.stopAllNormally()
+            self?.isStoppingBeforeTermination = false
+            sender.reply(toApplicationShouldTerminate: stopped)
+        }
+        return .terminateLater
+    }
+}
+
+struct WindowCloseGuard: NSViewRepresentable {
     func makeCoordinator() -> Coordinator {
-        Coordinator(model: model)
+        Coordinator()
     }
 
     func makeNSView(context: Context) -> NSView {
@@ -52,12 +115,13 @@ struct WindowCloseGuard: NSViewRepresentable {
 
     @MainActor
     final class Coordinator: NSObject, NSWindowDelegate {
-        private weak var model: AppModel?
+        private let requestApplicationTermination: @MainActor () -> Void
         private weak var attachedWindow: NSWindow?
-        private var bypassNextClose = false
 
-        init(model: AppModel) {
-            self.model = model
+        init(requestApplicationTermination: @escaping @MainActor () -> Void = {
+            NSApplication.shared.terminate(nil)
+        }) {
+            self.requestApplicationTermination = requestApplicationTermination
         }
 
         func attach(to window: NSWindow?) {
@@ -68,54 +132,8 @@ struct WindowCloseGuard: NSViewRepresentable {
         }
 
         func windowShouldClose(_ sender: NSWindow) -> Bool {
-            guard !bypassNextClose,
-                  let model,
-                  model.hasLiveWineActivity else {
-                bypassNextClose = false
-                return true
-            }
-
-            switch model.closeRunningBehavior {
-            case .leaveRunning:
-                return true
-            case .stopAndClose:
-                stopThenClose(sender, model: model)
-                return false
-            case .ask:
-                return presentCloseChoice(sender, model: model)
-            }
-        }
-
-        private func presentCloseChoice(_ window: NSWindow, model: AppModel) -> Bool {
-            let alert = NSAlert()
-            alert.messageText = "Windows applications are still running."
-            alert.informativeText = "Stop them normally before closing the window?"
-            alert.addButton(withTitle: "Request Stop and Close")
-            alert.addButton(withTitle: "Leave Running")
-            alert.addButton(withTitle: "Cancel")
-            let remember = NSButton(checkboxWithTitle: "Remember This Choice", target: nil, action: nil)
-            alert.accessoryView = remember
-
-            switch alert.runModal() {
-            case .alertFirstButtonReturn:
-                if remember.state == .on { model.closeRunningBehavior = .stopAndClose }
-                stopThenClose(window, model: model)
-                return false
-            case .alertSecondButtonReturn:
-                if remember.state == .on { model.closeRunningBehavior = .leaveRunning }
-                return true
-            default:
-                return false
-            }
-        }
-
-        private func stopThenClose(_ window: NSWindow, model: AppModel) {
-            Task {
-                if await model.stopAllNormally() {
-                    bypassNextClose = true
-                    window.performClose(nil)
-                }
-            }
+            requestApplicationTermination()
+            return false
         }
     }
 }

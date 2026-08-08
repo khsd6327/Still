@@ -111,13 +111,13 @@ struct SettingsView: View {
     }
 
     private var general: some View {
-        Section("Window Closing") {
+        Section("Quitting Still") {
             Picker("When applications are running", selection: $model.closeRunningBehavior) {
                 ForEach(CloseRunningBehavior.allCases, id: \.self) { behavior in
                     Text(behavior.title).tag(behavior)
                 }
             }
-            Text("Quitting Still always asks when Windows applications are running.")
+            Text("This setting applies to both the main window's close button and Quit Still.")
                 .font(.caption).foregroundStyle(.secondary)
         }
     }
